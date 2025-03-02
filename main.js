@@ -188,6 +188,12 @@
             return [];
         }
     }
-
+    function generateExcel() {
+        const blob = new Blob([collectedASINs.join("\n")], { type: "text/csv" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "asins.csv";
+        link.click(); 
+    }        
     createToggleButton();
 })();
