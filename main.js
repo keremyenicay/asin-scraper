@@ -73,24 +73,40 @@
     }
 
     function loadCategories() {
-        const categoryContainer = document.getElementById("categoryList");
-        categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
+    const categoryContainer = document.getElementById("categoryList");
+    categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
 
-        document.querySelectorAll("a[href*='/s?i=']").forEach(item => {
-            const checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.value = item.href;
-            checkbox.dataset.name = item.innerText.trim();
-            checkbox.style.marginRight = "5px";
+    // Gizlenmesi gereken kategoriler
+    const excludedCategories = [
+        "4 Stars & Up & Up",
+        "New",
+        "All Discounts",
+        "Climate Pledge Friendly",
+        "Subscribe & Save",
+        "Include Out of Stock"
+    ];
 
-            const label = document.createElement("label");
-            label.textContent = item.innerText.trim();
+    document.querySelectorAll(".s-navigation-item").forEach(item => {
+        const categoryName = item.innerText.trim();
+        if (excludedCategories.includes(categoryName)) {
+            return; // Gereksiz kategorileri atla
+        }
 
-            categoryContainer.appendChild(checkbox);
-            categoryContainer.appendChild(label);
-            categoryContainer.appendChild(document.createElement("br"));
-        });
-    }
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.value = item.href;
+        checkbox.dataset.name = categoryName;
+        checkbox.style.marginRight = "5px";
+
+        const label = document.createElement("label");
+        label.textContent = categoryName;
+
+        categoryContainer.appendChild(checkbox);
+        categoryContainer.appendChild(label);
+        categoryContainer.appendChild(document.createElement("br"));
+    });
+}
+
 
     function startScraping() {
         const selectedCategories = [];
