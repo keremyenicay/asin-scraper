@@ -4,45 +4,33 @@
     let active = false;
     let collectedASINs = [];
 
-    // Sayfa tamamen yüklendiğinde başlat
-    window.onload = function() {
-        console.log("✅ Sayfa yüklendi, script çalıştırılıyor.");
-        initScript();
-    };
+    // Sağ üstte eklenti butonu ekleyelim
+    const toggleButton = document.createElement("button");
+    toggleButton.innerText = "Eklentiyi Aktif Et";
+    toggleButton.style.position = "fixed";
+    toggleButton.style.top = "10px";
+    toggleButton.style.right = "10px";
+    toggleButton.style.padding = "10px";
+    toggleButton.style.zIndex = "9999";
+    toggleButton.style.backgroundColor = "red";
+    toggleButton.style.color = "white";
+    toggleButton.style.border = "none";
+    toggleButton.style.cursor = "pointer";
+    document.body.appendChild(toggleButton);
 
-    function initScript() {
-        if (document.getElementById("toggleButton")) return;
+    toggleButton.addEventListener("click", function () {
+        active = !active;
+        toggleButton.style.backgroundColor = active ? "green" : "red";
+        toggleButton.innerText = active ? "Eklenti Aktif ✅" : "Eklentiyi Aktif Et";
+        if (active) {
+            openControlPanel();
+        } else {
+            document.getElementById("customPanel")?.remove();
+        }
+    });
 
-        // Sağ üstte eklenti butonu ekleyelim
-        const toggleButton = document.createElement("button");
-        toggleButton.id = "toggleButton";
-        toggleButton.innerText = "Eklentiyi Aktif Et";
-        toggleButton.style.position = "fixed";
-        toggleButton.style.top = "10px";
-        toggleButton.style.right = "10px";
-        toggleButton.style.padding = "10px";
-        toggleButton.style.zIndex = "9999";
-        toggleButton.style.backgroundColor = "red";
-        toggleButton.style.color = "white";
-        toggleButton.style.border = "none";
-        toggleButton.style.cursor = "pointer";
-        document.body.appendChild(toggleButton);
-
-        toggleButton.addEventListener("click", function () {
-            active = !active;
-            toggleButton.style.backgroundColor = active ? "green" : "red";
-            toggleButton.innerText = active ? "Eklenti Aktif ✅" : "Eklentiyi Aktif Et";
-            if (active) {
-                openControlPanel();
-            } else {
-                document.getElementById("customPanel")?.remove();
-            }
-        });
-    }
-
+    // Kontrol panelini aç
     function openControlPanel() {
-        if (document.getElementById("customPanel")) return;
-
         const panel = document.createElement("div");
         panel.id = "customPanel";
         panel.style.position = "fixed";
@@ -72,48 +60,34 @@
         document.getElementById("startScraping").addEventListener("click", startScraping);
     }
 
+    // Satıcının mağazasındaki kategorileri çek
     function loadCategories() {
-    const categoryContainer = document.getElementById("categoryList");
-    categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
+        const categoryContainer = document.getElementById("categoryList");
+        categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
 
-    // Gizlenmesi gereken kategoriler
-    const excludedCategories = [
-        "4 Stars & Up & Up",
-        "New",
-        "All Discounts",
-        "Climate Pledge Friendly",
-        "Subscribe & Save",
-        "Include Out of Stock"
-    ];
+        document.querySelectorAll(".s-navigation-item").forEach(item => {
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.value = item.href; // Kategori linki
+            checkbox.dataset.name = item.innerText.trim(); // Kategori adı
+            checkbox.style.marginRight = "5px";
 
-    document.querySelectorAll(".s-navigation-item").forEach(item => {
-        const categoryName = item.innerText.trim();
-        if (excludedCategories.includes(categoryName)) {
-            return; // Gereksiz kategorileri atla
-        }
+            const label = document.createElement("label");
+            label.textContent = item.innerText.trim();
 
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.value = item.href;
-        checkbox.dataset.name = categoryName;
-        checkbox.style.marginRight = "5px";
+            categoryContainer.appendChild(checkbox);
+            categoryContainer.appendChild(label);
+            categoryContainer.appendChild(document.createElement("br"));
+        });
+    }
 
-        const label = document.createElement("label");
-        label.textContent = categoryName;
-
-        categoryContainer.appendChild(checkbox);
-        categoryContainer.appendChild(label);
-        categoryContainer.appendChild(document.createElement("br"));
-    });
-}
-
-
+    // Tarama başlat
     function startScraping() {
         const selectedCategories = [];
         document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
             selectedCategories.push({
                 url: checkbox.value,
-                name: checkbox.dataset.name
+                name: checkbox.dataset.name // Kategori adını al
             });
         });
 
@@ -128,6 +102,7 @@
         processCategories(selectedCategories);
     }
 
+    // Tarama durumu göstermek için kutu oluştur
     function createProgressBox() {
         const progressBox = document.createElement("div");
         progressBox.id = "progressBox";
@@ -150,82 +125,48 @@
     }
 
     async function processCategories(categories) {
-    for (const category of categories) {
-        collectedASINs = [];
-        let totalProducts = 0;
+        for (const category of categories) {
+            let totalProducts = 0;
+            const fetchPromises = [];
 
-        console.log(`🚀 ${category.name} kategorisi için tarama başlatıldı...`);
-
-        // İlk sayfadaki ASIN'leri al
-        await fetchASINs(category.url, category.name);
-
-        // Daha fazla ürün olup olmadığını kontrol et
-        let nextPage = 2;
-        let hasMorePages = true;
-
-        while (hasMorePages && nextPage <= 400) {
-            const nextPageUrl = category.url + `&page=${nextPage}`;
-            const asins = await fetchASINs(nextPageUrl, category.name);
-
-            if (asins.length === 0) {
-                console.log(`⏹ ${category.name} kategorisi için daha fazla ürün bulunamadı. Sayfa: ${nextPage}`);
-                hasMorePages = false; // Eğer ASIN bulunamazsa, taramayı durdur
-            } else {
-                totalProducts += asins.length;
-                nextPage++;
+            for (let page = 1; page <= 400; page++) {
+                const url = category.url + `&page=${page}`;
+                fetchPromises.push(fetchASINs(url, category.name));
             }
+
+            // Paralel tarama (Çok hızlı!)
+            const results = await Promise.all(fetchPromises);
+            results.forEach(asins => {
+                collectedASINs.push(...asins);
+                totalProducts += asins.length;
+            });
 
             updateProgress(category.name, totalProducts);
         }
-
-        console.log(`🔎 ${category.name} kategorisinde toplam ${collectedASINs.length} ASIN bulundu!`);
+        generateExcel();
     }
 
-    generateExcel();
-}
-
-async function fetchASINs(url, categoryName) {
-    try {
-        console.log(`🔍 ${categoryName} | ${url} taranıyor...`);
-
-        // Sayfa içeriğini al
-        const response = await fetch(url, { method: "GET" });
-        const text = await response.text();
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(text, "text/html");
-        const asins = [];
-
-        // 1️⃣ Amazon'un HTML içinde sakladığı ASIN'leri al
-        doc.querySelectorAll("div[data-asin]").forEach(item => {
-            const asin = item.getAttribute("data-asin");
-            if (asin) asins.push(asin);
-        });
-
-        // 2️⃣ Amazon'un arka planda yüklediği (lazy-loaded) JSON verisini çek
-        const scriptTags = doc.querySelectorAll("script");
-        scriptTags.forEach(script => {
-            if (script.innerText.includes("asin")) {
-                const match = script.innerText.match(/"asin":"(B[A-Z0-9]{9})"/g);
-                if (match) {
-                    match.forEach(m => {
-                        const extractedASIN = m.replace(/"asin":"/, "").replace(/"/, "");
-                        if (!asins.includes(extractedASIN)) {
-                            asins.push(extractedASIN);
-                        }
-                    });
-                }
-            }
-        });
-
-        console.log(`✅ ${categoryName} | ${url} | ${asins.length} ASIN bulundu.`);
-        return asins;
-    } catch (error) {
-        console.error(`❌ Hata (${categoryName} - ${url}):`, error);
-        return [];
+    // ASIN çekme fonksiyonu (Sayfa sayfa ilerlemeden, paralel çalışıyor!)
+    async function fetchASINs(url, categoryName) {
+        try {
+            const response = await fetch(url, { method: "GET" });
+            const text = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(text, "text/html");
+            const asins = [];
+            doc.querySelectorAll("div[data-asin]").forEach(item => {
+                const asin = item.getAttribute("data-asin");
+                if (asin) asins.push(asin);
+            });
+            updateProgress(categoryName, collectedASINs.length);
+            return asins;
+        } catch (error) {
+            console.error("ASIN çekme hatası:", error);
+            return [];
+        }
     }
-}
 
-
+    // ASIN'leri CSV olarak indir
     function generateExcel() {
         let csvContent = "data:text/csv;charset=utf-8,ASIN\n";
         collectedASINs.forEach(asin => {
