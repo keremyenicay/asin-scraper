@@ -177,6 +177,8 @@
 
             updateProgress(category.name, totalProducts);
         }
+
+        console.log(`🔎 ${category.name} kategorisinde toplam ${collectedASINs.length} ASIN bulundu!`);
     }
 
     generateExcel();
@@ -186,17 +188,33 @@ async function fetchASINs(url, categoryName) {
     try {
         console.log(`🔍 ${categoryName} | ${url} taranıyor...`);
 
-        // Amazon'un sunduğu XHR veya Fetch API'yi kullanarak daha fazla ürün al
+        // Sayfa içeriğini al
         const response = await fetch(url, { method: "GET" });
         const text = await response.text();
         const parser = new DOMParser();
         const doc = parser.parseFromString(text, "text/html");
         const asins = [];
 
-        // Ürünlerin bulunduğu öğeleri al
+        // 1️⃣ Amazon'un HTML içinde sakladığı ASIN'leri al
         doc.querySelectorAll("div[data-asin]").forEach(item => {
             const asin = item.getAttribute("data-asin");
             if (asin) asins.push(asin);
+        });
+
+        // 2️⃣ Amazon'un arka planda yüklediği (lazy-loaded) JSON verisini çek
+        const scriptTags = doc.querySelectorAll("script");
+        scriptTags.forEach(script => {
+            if (script.innerText.includes("asin")) {
+                const match = script.innerText.match(/"asin":"(B[A-Z0-9]{9})"/g);
+                if (match) {
+                    match.forEach(m => {
+                        const extractedASIN = m.replace(/"asin":"/, "").replace(/"/, "");
+                        if (!asins.includes(extractedASIN)) {
+                            asins.push(extractedASIN);
+                        }
+                    });
+                }
+            }
         });
 
         console.log(`✅ ${categoryName} | ${url} | ${asins.length} ASIN bulundu.`);
@@ -206,6 +224,7 @@ async function fetchASINs(url, categoryName) {
         return [];
     }
 }
+
 
     function generateExcel() {
         let csvContent = "data:text/csv;charset=utf-8,ASIN\n";
