@@ -3,7 +3,7 @@
 
     let active = false;
     let collectedASINs = [];
-    
+
     function createToggleButton() {
         const button = document.createElement("button");
         button.innerText = "Eklentiyi Aktif Et";
@@ -43,37 +43,31 @@
         panel.style.border = "2px solid black";
         panel.style.zIndex = "10000";
         panel.style.padding = "10px";
+        panel.style.overflow = "hidden";
         document.body.appendChild(panel);
 
         panel.innerHTML = `
             <h3 style="text-align:center;">ASIN Tarayıcı</h3>
-            <button id="selectAll">Hepsini Seç</button>
-            <button id="clearSelection">Seçimi Temizle</button>
-            <div id="categoryList" style="height: 80%; overflow-y: auto; border: 1px solid gray; padding: 10px;"></div>
-            <button id="startScraping" style="margin-top: 10px; width: 100%; padding: 10px;">Tarama Başlat</button>
+            <button id="selectAll" style="margin: 5px;">Hepsini Seç</button>
+            <button id="clearSelection" style="margin: 5px;">Seçimi Temizle</button>
+            <div id="categoryList" style="height: 400px; overflow-y: auto; border: 1px solid gray; padding: 10px;"></div>
+            <button id="startScraping" style="width: 100%; padding: 10px; background-color: blue; color: white; border: none; cursor: pointer; margin-top: 10px;">Tarama Başlat</button>
         `;
-        
+
         loadCategories();
         document.getElementById("startScraping").addEventListener("click", startScraping);
         document.getElementById("selectAll").addEventListener("click", () => {
-            document.querySelectorAll("#categoryList input").forEach(cb => cb.checked = true);
+            document.querySelectorAll("#categoryList input").forEach(checkbox => checkbox.checked = true);
         });
         document.getElementById("clearSelection").addEventListener("click", () => {
-            document.querySelectorAll("#categoryList input").forEach(cb => cb.checked = false);
+            document.querySelectorAll("#categoryList input").forEach(checkbox => checkbox.checked = false);
         });
     }
 
     function loadCategories() {
         const categoryContainer = document.getElementById("categoryList");
         categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
-
-        const excludedCategories = [
-            "4 Stars & Up & Up",
-            "New",
-            "Climate Pledge Friendly",
-            "Amazon Global Store",
-            "Include Out of Stock"
-        ];
+        const excludedCategories = ["4 Stars & Up & Up", "New", "Climate Pledge Friendly", "Amazon Global Store", "Include Out of Stock"];
 
         document.querySelectorAll(".s-navigation-item").forEach(item => {
             const categoryName = item.innerText.trim();
@@ -97,7 +91,10 @@
     function startScraping() {
         const selectedCategories = [];
         document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
-            selectedCategories.push({ url: checkbox.value, name: checkbox.dataset.name });
+            selectedCategories.push({
+                url: checkbox.value,
+                name: checkbox.dataset.name
+            });
         });
 
         if (selectedCategories.length === 0) {
@@ -132,23 +129,29 @@
         }
     }
 
+    async function fetchASINs(url) {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) return [];
+            const text = await response.text();
+            const asinMatches = text.match(/dp\/(\w{10})/g) || [];
+            return [...new Set(asinMatches.map(match => match.replace("dp/", "")))];
+        } catch (error) {
+            console.error("Hata:", error);
+            return [];
+        }
+    }
+
     async function processCategories(categories) {
         for (const category of categories) {
             let totalProducts = 0;
-            const fetchPromises = [];
-            
             for (let page = 1; page <= 400; page++) {
-                const url = category.url + `&page=${page}`;
-                fetchPromises.push(fetchASINs(url, category.name));
-            }
-
-            const results = await Promise.all(fetchPromises);
-            results.forEach(asins => {
+                const url = `${category.url}&page=${page}`;
+                const asins = await fetchASINs(url);
                 collectedASINs.push(...asins);
                 totalProducts += asins.length;
-            });
-
-            updateProgress(category.name, totalProducts);
+                updateProgress(category.name, totalProducts);
+            }
         }
         generateExcel();
     }
