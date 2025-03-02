@@ -150,44 +150,54 @@
     }
 
     async function processCategories(categories) {
-        for (const category of categories) {
-            let totalProducts = 0;
-            const fetchPromises = [];
+    for (const category of categories) {
+        let totalProducts = 0;
+        let page = 1;
+        let hasMorePages = true;
+        collectedASINs = [];
 
-            for (let page = 1; page <= 5; page++) {
-                const url = category.url + `&page=${page}`;
-                fetchPromises.push(fetchASINs(url, category.name));
+        while (hasMorePages) {
+            const url = category.url + `&page=${page}`;
+            console.log(`🔍 Sayfa taranıyor: ${url}`);
+            
+            const asins = await fetchASINs(url, category.name);
+            collectedASINs.push(...asins);
+            totalProducts += asins.length;
+
+            // Ürün var mı kontrol et, yoksa çık
+            if (asins.length === 0) {
+                hasMorePages = false;
+            } else {
+                page++; // Sonraki sayfaya geç
             }
-
-            const results = await Promise.all(fetchPromises);
-            results.forEach(asins => {
-                collectedASINs.push(...asins);
-                totalProducts += asins.length;
-            });
 
             updateProgress(category.name, totalProducts);
         }
-        generateExcel();
     }
 
-    async function fetchASINs(url, categoryName) {
-        try {
-            const response = await fetch(url, { method: "GET" });
-            const text = await response.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(text, "text/html");
-            const asins = [];
-            doc.querySelectorAll("div[data-asin]").forEach(item => {
-                const asin = item.getAttribute("data-asin");
-                if (asin) asins.push(asin);
-            });
-            updateProgress(categoryName, collectedASINs.length);
-            return asins;
-        } catch (error) {
-            console.error("ASIN çekme hatası:", error);
-            return [];
-        }
+    generateExcel();
+}
+
+async function fetchASINs(url, categoryName) {
+    try {
+        const response = await fetch(url, { method: "GET" });
+        const text = await response.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(text, "text/html");
+        const asins = [];
+
+        doc.querySelectorAll("div[data-asin]").forEach(item => {
+            const asin = item.getAttribute("data-asin");
+            if (asin) asins.push(asin);
+        });
+
+        updateProgress(categoryName, collectedASINs.length);
+        return asins;
+    } catch (error) {
+        console.error("ASIN çekme hatası:", error);
+        return [];
     }
+}
 
     function generateExcel() {
         let csvContent = "data:text/csv;charset=utf-8,ASIN\n";
