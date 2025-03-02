@@ -1,146 +1,83 @@
+// main.js - Güncellenmiş Versiyon
+
 (function () {
     'use strict';
 
-    let active = false;
-    let collectedASINs = [];
-    let savedFilters = JSON.parse(localStorage.getItem("savedFilters")) || {};
+    const STORAGE_KEY = 'savedFilters';
+    let savedFilters = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
 
-    // Sağ üstte eklenti butonu ekleyelim
-    const toggleButton = document.createElement("button");
-    toggleButton.innerText = "Eklentiyi Aktif Et";
-    toggleButton.style.position = "fixed";
-    toggleButton.style.top = "10px";
-    toggleButton.style.right = "10px";
-    toggleButton.style.padding = "10px";
-    toggleButton.style.zIndex = "9999";
-    toggleButton.style.backgroundColor = "red";
-    toggleButton.style.color = "white";
-    toggleButton.style.border = "none";
-    toggleButton.style.cursor = "pointer";
-    document.body.appendChild(toggleButton);
-
-    toggleButton.addEventListener("click", function () {
-        active = !active;
-        toggleButton.style.backgroundColor = active ? "green" : "red";
-        toggleButton.innerText = active ? "Eklenti Aktif ✅" : "Eklentiyi Aktif Et";
-        if (active) {
-            openControlPanel();
-        } else {
-            document.getElementById("customPanel")?.remove();
-        }
-    });
-
-    // Kontrol panelini aç
-    function openControlPanel() {
-        const panel = document.createElement("div");
-        panel.id = "customPanel";
-        panel.style.position = "fixed";
-        panel.style.top = "50px";
-        panel.style.left = "50%";
-        panel.style.transform = "translateX(-50%)";
-        panel.style.width = "600px";
-        panel.style.height = "500px";
-        panel.style.backgroundColor = "white";
-        panel.style.border = "2px solid black";
-        panel.style.zIndex = "10000";
-        panel.style.padding = "10px";
-        panel.style.overflow = "hidden";
-        panel.style.borderRadius = "10px";
-        panel.style.boxShadow = "0px 0px 10px rgba(0, 0, 0, 0.2)";
-        document.body.appendChild(panel);
-
-        panel.innerHTML = `
-            <h3 style="text-align:center; font-family: Arial, sans-serif;">ASIN Tarayıcı</h3>
-            <div style="display:flex; height: 90%;">
-                <div id="categoryList" style="width: 60%; overflow-y: auto; border-right: 1px solid gray; padding: 10px;"></div>
-                <div style="width: 40%; padding: 10px;">
-                    <h4>Filtre Yönetimi</h4>
-                    <input type="text" id="filterName" placeholder="Filtre adı girin" style="width: 80%; padding: 5px;">
-                    <button id="saveFilter" style="padding: 5px; background: green; color: white; border: none; cursor: pointer;">Kaydet</button>
-                    <h4>Kaydedilmiş Filtreler</h4>
-                    <select id="savedFiltersDropdown" style="width: 100%; padding: 5px;"></select>
-                    <button id="loadFilter" style="margin-top: 5px; padding: 5px; background: blue; color: white; border: none; cursor: pointer;">Yükle</button>
-                    <button id="startScraping" style="margin-top: 10px; padding: 10px; font-size: 16px; background-color: blue; color: white; border: none; cursor: pointer; width: 100%;">Tarama Başlat</button>
-                </div>
-            </div>
-        `;
-
-        loadCategories();
-        loadSavedFilters();
-        document.getElementById("startScraping").addEventListener("click", startScraping);
-        document.getElementById("saveFilter").addEventListener("click", saveFilter);
-        document.getElementById("loadFilter").addEventListener("click", loadFilter);
+    function saveFilter(name, categories) {
+        savedFilters[name] = categories;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(savedFilters));
     }
 
-    // Satıcının mağazasındaki kategorileri çek
-    function loadCategories() {
-        const categoryContainer = document.getElementById("categoryList");
-        categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
+    function loadFilter(name) {
+        return savedFilters[name] || [];
+    }
 
-        document.querySelectorAll(".s-navigation-item").forEach(item => {
-            const categoryName = item.innerText.trim();
-            const excludedCategories = [
-                "4 Stars & Up & Up",
-                "New",
-                "All Discounts",
-                "Climate Pledge Friendly",
-                "Amazon Global Store",
-                "Include Out of Stock"
-            ];
-            if (excludedCategories.includes(categoryName)) return;
+    function createUI() {
+        const container = document.createElement('div');
+        container.style.position = 'fixed';
+        container.style.top = '50px';
+        container.style.left = '50px';
+        container.style.width = '400px';
+        container.style.height = '500px';
+        container.style.background = 'white';
+        container.style.zIndex = '9999';
+        container.style.overflowY = 'auto';
+        container.style.padding = '10px';
+        container.style.border = '1px solid black';
 
-            const checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.value = item.href;
-            checkbox.dataset.name = categoryName;
-            checkbox.style.marginRight = "5px";
+        const title = document.createElement('h3');
+        title.innerText = 'Kategori Seçimi';
+        container.appendChild(title);
 
-            const label = document.createElement("label");
-            label.textContent = categoryName;
-
-            categoryContainer.appendChild(checkbox);
-            categoryContainer.appendChild(label);
-            categoryContainer.appendChild(document.createElement("br"));
+        const filterSelect = document.createElement('select');
+        filterSelect.innerHTML = '<option value="">Filtre Seç</option>' + 
+            Object.keys(savedFilters).map(f => `<option value="${f}">${f}</option>`).join('');
+        filterSelect.addEventListener('change', function() {
+            const selectedFilter = filterSelect.value;
+            if (selectedFilter) {
+                const categories = loadFilter(selectedFilter);
+                document.querySelectorAll('.category-checkbox').forEach(cb => {
+                    cb.checked = categories.includes(cb.value);
+                });
+            }
         });
-    }
+        container.appendChild(filterSelect);
 
-    // Kaydedilmiş filtreleri yükle
-    function loadSavedFilters() {
-        const dropdown = document.getElementById("savedFiltersDropdown");
-        dropdown.innerHTML = "<option value=''>Filtre Seçin</option>";
-        Object.keys(savedFilters).forEach(filterName => {
-            const option = document.createElement("option");
-            option.value = filterName;
-            option.textContent = filterName;
-            dropdown.appendChild(option);
+        const categoryList = document.createElement('div');
+        categoryList.style.maxHeight = '300px';
+        categoryList.style.overflowY = 'scroll';
+        container.appendChild(categoryList);
+
+        const categories = ['Electronics', 'Books', 'Home & Kitchen', 'Toys']; // Örnek kategoriler
+        categories.forEach(category => {
+            const label = document.createElement('label');
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'category-checkbox';
+            checkbox.value = category;
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(category));
+            categoryList.appendChild(label);
+            categoryList.appendChild(document.createElement('br'));
         });
-    }
 
-    // Filtre kaydet
-    function saveFilter() {
-        const filterName = document.getElementById("filterName").value.trim();
-        if (!filterName) return alert("Filtre adı giriniz!");
-
-        const selectedCategories = [];
-        document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
-            selectedCategories.push({ url: checkbox.value, name: checkbox.dataset.name });
+        const saveFilterBtn = document.createElement('button');
+        saveFilterBtn.innerText = 'Filtreyi Kaydet';
+        saveFilterBtn.addEventListener('click', function () {
+            const selectedCategories = [...document.querySelectorAll('.category-checkbox:checked')].map(cb => cb.value);
+            const filterName = prompt('Filtre Adı Girin:');
+            if (filterName) {
+                saveFilter(filterName, selectedCategories);
+                alert('Filtre kaydedildi!');
+            }
         });
-        if (selectedCategories.length === 0) return alert("En az bir kategori seçmelisiniz!");
+        container.appendChild(saveFilterBtn);
 
-        savedFilters[filterName] = selectedCategories;
-        localStorage.setItem("savedFilters", JSON.stringify(savedFilters));
-        loadSavedFilters();
-        alert("Filtre kaydedildi!");
+        document.body.appendChild(container);
     }
 
-    // Filtre yükle
-    function loadFilter() {
-        const filterName = document.getElementById("savedFiltersDropdown").value;
-        if (!filterName) return;
-        const selectedCategories = savedFilters[filterName];
-        document.querySelectorAll("#categoryList input").forEach(checkbox => {
-            checkbox.checked = selectedCategories.some(cat => cat.url === checkbox.value);
-        });
-    }
-
+    createUI();
 })();
