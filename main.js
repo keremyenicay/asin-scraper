@@ -151,26 +151,28 @@
     }
 
     async function processCategories(categories) {
-        for (const category of categories) {
-            let totalProducts = 0;
-            const fetchPromises = [];
-
-            for (let page = 1; page <= 400; page++) {
-                const url = category.url + `&page=${page}`;
-                fetchPromises.push(fetchASINs(url, category.name));
-            }
-
-            const results = await Promise.allSettled(fetchPromises);
-            results.forEach(result => {
-                if (result.status === "fulfilled") {
-                    collectedASINs.push(...result.value);
-                    totalProducts += result.value.length;
-                }
-            });
-
-            updateProgress(category.name, totalProducts);
-        }
+        await Promise.all(categories.map(category => processCategory(category)));
         generateExcel();
+    }
+
+    async function processCategory(category) {
+        let totalProducts = 0;
+        const fetchPromises = [];
+
+        for (let page = 1; page <= 400; page++) {
+            const url = category.url + `&page=${page}`;
+            fetchPromises.push(fetchASINs(url, category.name));
+        }
+
+        const results = await Promise.allSettled(fetchPromises);
+        results.forEach(result => {
+            if (result.status === "fulfilled") {
+                collectedASINs.push(...result.value);
+                totalProducts += result.value.length;
+            }
+        });
+
+        updateProgress(category.name, totalProducts);
     }
 
     createToggleButton();
