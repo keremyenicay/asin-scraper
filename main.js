@@ -3,6 +3,7 @@
 
     let active = false;
     let collectedASINs = [];
+    let categoryQueue = [];
 
     function createToggleButton() {
         const button = document.createElement("button");
@@ -31,6 +32,7 @@
     }
 
     function openControlPanel() {
+        document.getElementById("customPanel")?.remove();
         const panel = document.createElement("div");
         panel.id = "customPanel";
         panel.style.position = "fixed";
@@ -51,13 +53,20 @@
             <div style="display:flex; height: 90%;">
                 <div id="categoryList" style="width: 50%; overflow-y: auto; border-right: 1px solid gray; padding: 10px;"></div>
                 <div style="width: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                    <button id="selectAll" style="margin-bottom: 10px; padding: 5px;">Hepsini Seç</button>
+                    <button id="clearSelection" style="margin-bottom: 10px; padding: 5px;">Seçimi Temizle</button>
                     <button id="startScraping" style="padding: 10px; font-size: 16px; background-color: blue; color: white; border: none; cursor: pointer;">Tarama Başlat</button>
                 </div>
             </div>
         `;
-
         loadCategories();
         document.getElementById("startScraping").addEventListener("click", startScraping);
+        document.getElementById("selectAll").addEventListener("click", () => {
+            document.querySelectorAll("#categoryList input").forEach(cb => cb.checked = true);
+        });
+        document.getElementById("clearSelection").addEventListener("click", () => {
+            document.querySelectorAll("#categoryList input").forEach(cb => cb.checked = false);
+        });
     }
 
     function loadCategories() {
@@ -71,10 +80,8 @@
             checkbox.value = item.href;
             checkbox.dataset.name = categoryName;
             checkbox.style.marginRight = "5px";
-
             const label = document.createElement("label");
             label.textContent = categoryName;
-
             categoryContainer.appendChild(checkbox);
             categoryContainer.appendChild(label);
             categoryContainer.appendChild(document.createElement("br"));
@@ -82,23 +89,19 @@
     }
 
     function startScraping() {
-        const selectedCategories = [];
+        collectedASINs = [];
+        categoryQueue = [];
         document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
-            selectedCategories.push({
-                url: checkbox.value,
-                name: checkbox.dataset.name
-            });
+            categoryQueue.push({ url: checkbox.value, name: checkbox.dataset.name });
         });
 
-        if (selectedCategories.length === 0) {
+        if (categoryQueue.length === 0) {
             alert("Lütfen en az bir kategori seçin!");
             return;
         }
 
-        collectedASINs = [];
-        document.getElementById("customPanel").remove();
         createProgressBox();
-        processCategories(selectedCategories);
+        processCategories();
     }
 
     function createProgressBox() {
@@ -115,6 +118,30 @@
         document.body.appendChild(progressBox);
     }
 
+    async function processCategories() {
+        while (categoryQueue.length > 0) {
+            let { url, name } = categoryQueue.shift();
+            await scrapeCategory(url, name);
+        }
+        generateExcel();
+    }
+
+    async function scrapeCategory(url, category) {
+        let totalProducts = 0;
+        let page = 1;
+        let hasMorePages = true;
+
+        while (hasMorePages && page <= 400) {
+            const pageUrl = `${url}&page=${page}`;
+            const asins = await fetchASINs(pageUrl);
+            collectedASINs.push(...asins);
+            totalProducts += asins.length;
+            updateProgress(category, totalProducts);
+            if (asins.length === 0) hasMorePages = false;
+            page++;
+        }
+    }
+
     function updateProgress(category, totalProducts) {
         const progressBox = document.getElementById("progressBox");
         if (progressBox) {
@@ -122,45 +149,14 @@
         }
     }
 
-    async function processCategories(categories) {
-        for (const category of categories) {
-            let totalProducts = 0;
-            let page = 1;
-            let hasMorePages = true;
-
-            while (hasMorePages && page <= 400) {
-                const url = category.url + `&page=${page}`;
-                const asins = await fetchASINs(url);
-                collectedASINs.push(...asins);
-                totalProducts += asins.length;
-                updateProgress(category.name, totalProducts);
-
-                if (asins.length === 0) {
-                    hasMorePages = false;
-                } else {
-                    page++;
-                }
-            }
-        }
-        generateExcel();
-    }
-
     async function fetchASINs(url) {
         try {
             const response = await fetch(url);
             const text = await response.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(text, "text/html");
-
-            const asins = [];
-            doc.querySelectorAll("div[data-asin]").forEach(el => {
-                const asin = el.getAttribute("data-asin");
-                if (asin) asins.push(asin);
-            });
-
-            return asins;
+            const doc = new DOMParser().parseFromString(text, "text/html");
+            return [...doc.querySelectorAll("div[data-asin]")].map(el => el.getAttribute("data-asin")).filter(Boolean);
         } catch (error) {
-            console.error(`ASIN çekme hatası: ${error}`);
+            console.error(`Hata: ${error}`);
             return [];
         }
     }
@@ -170,7 +166,8 @@
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
         link.download = "asins.csv";
-        link.click(); 
-    }        
+        link.click();
+    }
+
     createToggleButton();
 })();
