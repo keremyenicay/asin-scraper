@@ -150,50 +150,46 @@
     }
 
     async function processCategories(categories) {
-    for (const category of categories) {
-        let totalProducts = 0;
-        collectedASINs = [];
-        const maxPages = 400; // En fazla 400 sayfa taransın
+        for (const category of categories) {
+            let totalProducts = 0;
+            const fetchPromises = [];
 
-        for (let page = 1; page <= maxPages; page++) {
-            const url = category.url + `&page=${page}`;
-            console.log(`🔍 Sayfa taranıyor: ${url}`);
-
-            const asins = await fetchASINs(url, category.name);
-            if (asins.length === 0) {
-                console.log("❌ Ürün bulunamadı, tarama durduruluyor.");
-                break; // Ürün yoksa döngüyü bitir
+            for (let page = 1; page <= 400; page++) {
+                const url = category.url + `&page=${page}`;
+                fetchPromises.push(fetchASINs(url, category.name));
             }
 
-            collectedASINs.push(...asins);
-            totalProducts += asins.length;
+            // Paralel tarama (Çok hızlı!)
+            const results = await Promise.all(fetchPromises);
+            results.forEach(asins => {
+                collectedASINs.push(...asins);
+                totalProducts += asins.length;
+            });
+
             updateProgress(category.name, totalProducts);
         }
+        generateExcel();
     }
 
-    generateExcel();
-}
-
-async function fetchASINs(url, categoryName) {
-    try {
-        const response = await fetch(url, { method: "GET" });
-        const text = await response.text();
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(text, "text/html");
-        const asins = [];
-
-        doc.querySelectorAll("div[data-asin]").forEach(item => {
-            const asin = item.getAttribute("data-asin");
-            if (asin) asins.push(asin);
-        });
-
-        updateProgress(categoryName, collectedASINs.length);
-        return asins;
-    } catch (error) {
-        console.error("ASIN çekme hatası:", error);
-        return [];
+    // ASIN çekme fonksiyonu (Sayfa sayfa ilerlemeden, paralel çalışıyor!)
+    async function fetchASINs(url, categoryName) {
+        try {
+            const response = await fetch(url, { method: "GET" });
+            const text = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(text, "text/html");
+            const asins = [];
+            doc.querySelectorAll("div[data-asin]").forEach(item => {
+                const asin = item.getAttribute("data-asin");
+                if (asin) asins.push(asin);
+            });
+            updateProgress(categoryName, collectedASINs.length);
+            return asins;
+        } catch (error) {
+            console.error("ASIN çekme hatası:", error);
+            return [];
+        }
     }
-}
 
 
     function generateExcel() {
