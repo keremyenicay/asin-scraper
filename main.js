@@ -50,13 +50,17 @@
             <h3 style="text-align:center;">ASIN Tarayıcı</h3>
             <div style="display:flex; height: 90%;">
                 <div id="categoryList" style="width: 50%; overflow-y: auto; border-right: 1px solid gray; padding: 10px;"></div>
-                <div style="width: 50%; display: flex; justify-content: center; align-items: center;">
+                <div style="width: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                    <button id="selectAllCategories" style="padding: 5px; margin: 5px; background-color: orange; color: white; border: none; cursor: pointer;">Hepsini Seç</button>
+                    <button id="clearAllCategories" style="padding: 5px; margin: 5px; background-color: gray; color: white; border: none; cursor: pointer;">Seçimi Temizle</button>
                     <button id="startScraping" style="padding: 10px; font-size: 16px; background-color: blue; color: white; border: none; cursor: pointer;">Tarama Başlat</button>
                 </div>
             </div>
         `;
 
         loadCategories();
+        document.getElementById("selectAllCategories").addEventListener("click", selectAllCategories);
+        document.getElementById("clearAllCategories").addEventListener("click", clearAllCategories);
         document.getElementById("startScraping").addEventListener("click", startScraping);
     }
 
@@ -90,6 +94,18 @@
             categoryContainer.appendChild(checkbox);
             categoryContainer.appendChild(label);
             categoryContainer.appendChild(document.createElement("br"));
+        });
+    }
+
+    function selectAllCategories() {
+        document.querySelectorAll("#categoryList input[type='checkbox']").forEach(checkbox => {
+            checkbox.checked = true;
+        });
+    }
+
+    function clearAllCategories() {
+        document.querySelectorAll("#categoryList input[type='checkbox']").forEach(checkbox => {
+            checkbox.checked = false;
         });
     }
 
@@ -137,53 +153,24 @@
     async function processCategories(categories) {
         for (const category of categories) {
             let totalProducts = 0;
-            let allASINs = [];
+            const fetchPromises = [];
 
-            for (let batchStart = 1; batchStart <= 400; batchStart += 10) {
-                const batchPromises = [];
-
-                for (let page = batchStart; page < batchStart + 10 && page <= 400; page++) {
-                    const url = `${category.url}&page=${page}`;
-                    batchPromises.push(fetchASINs(url, category.name));
-                }
-
-                const results = await Promise.all(batchPromises);
-                results.forEach(asins => {
-                    allASINs.push(...asins);
-                    totalProducts += asins.length;
-                });
-
-                updateProgress(category.name, totalProducts);
+            for (let page = 1; page <= 400; page++) {
+                const url = category.url + `&page=${page}`;
+                fetchPromises.push(fetchASINs(url, category.name));
             }
 
-            collectedASINs.push(...allASINs);
+            const results = await Promise.allSettled(fetchPromises);
+            results.forEach(result => {
+                if (result.status === "fulfilled") {
+                    collectedASINs.push(...result.value);
+                    totalProducts += result.value.length;
+                }
+            });
+
+            updateProgress(category.name, totalProducts);
         }
         generateExcel();
-    }
-
-    async function fetchASINs(url, categoryName) {
-        try {
-            const response = await fetch(url);
-            const text = await response.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(text, "text/html");
-
-            const asinElements = doc.querySelectorAll("div[data-asin]:not([data-asin=''])");
-            return [...asinElements].map(el => el.getAttribute("data-asin"));
-        } catch (error) {
-            console.error(`Hata: ${url}`, error);
-            return [];
-        }
-    }
-
-    function generateExcel() {
-        const blob = new Blob([collectedASINs.join("\n")], { type: "text/plain" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = "asin_list.txt";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
     }
 
     createToggleButton();
