@@ -66,7 +66,6 @@
             const checkbox = document.createElement("input");
             checkbox.type = "checkbox";
             checkbox.value = item.href; // Kategori linkini al
-            checkbox.dataset.name = item.innerText.trim(); // Kategori adını kaydet
             checkbox.style.marginRight = "5px";
 
             const label = document.createElement("label");
@@ -81,10 +80,7 @@
     function startScraping() {
         const selectedCategories = [];
         document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
-            selectedCategories.push({
-                url: checkbox.value,
-                name: checkbox.dataset.name // Kategori adını al
-            });
+            selectedCategories.push(checkbox.value);
         });
 
         if (selectedCategories.length === 0) {
@@ -92,9 +88,9 @@
             return;
         }
 
-        collectedASINs = [];
-        document.getElementById("customPanel").remove();
-        createProgressBox();
+        collectedASINs = []; // ASIN listesini sıfırla
+        document.getElementById("customPanel").remove(); // Paneli kapat
+        createProgressBox(); // Sağ alt köşeye ilerleme kutusu ekle
         processCategories(selectedCategories);
     }
 
@@ -115,34 +111,27 @@
     function updateProgress(category, page, totalProducts) {
         const progressBox = document.getElementById("progressBox");
         if (progressBox) {
-            progressBox.innerHTML = `Kategori: <b>${category}</b> <br> Sayfa: ${page} <br> Toplam ASIN: ${totalProducts}`;
+            progressBox.innerHTML = `Kategori: ${category} <br> Sayfa: ${page} <br> Toplam ASIN: ${totalProducts}`;
         }
     }
 
     async function processCategories(categories) {
-        for (const category of categories) {
+        for (const categoryURL of categories) {
             let totalProducts = 0;
-
-            // 1-400. sayfalar için paralel istekler gönder
-            const fetchPromises = [];
             for (let page = 1; page <= 400; page++) {
-                const url = category.url + `&page=${page}`;
-                fetchPromises.push(fetchASINs(url, category.name, page));
-            }
-
-            // Tüm sayfaları paralel olarak işle
-            const results = await Promise.all(fetchPromises);
-            results.forEach(asins => {
+                const url = categoryURL + `&page=${page}`;
+                const asins = await fetchASINs(url);
+                if (asins.length === 0) break; 
                 collectedASINs.push(...asins);
                 totalProducts += asins.length;
-            });
-
-            updateProgress(category.name, "Tamamlandı", totalProducts);
+                updateProgress(categoryURL, page, totalProducts);
+                await new Promise(resolve => setTimeout(resolve, 1000)); 
+            }
         }
         generateExcel();
     }
 
-    async function fetchASINs(url, categoryName, page) {
+    async function fetchASINs(url) {
         try {
             const response = await fetch(url, { method: "GET" });
             const text = await response.text();
@@ -153,7 +142,6 @@
                 const asin = item.getAttribute("data-asin");
                 if (asin) asins.push(asin);
             });
-            updateProgress(categoryName, page, collectedASINs.length);
             return asins;
         } catch (error) {
             console.error("ASIN çekme hatası:", error);
