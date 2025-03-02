@@ -7,6 +7,8 @@
     // Sayfa tamamen yüklendiğinde başlat
     window.onload = function() {
         console.log("✅ Sayfa yüklendi, script çalıştırılıyor.");
+
+    document.querySelectorAll("#kategoriSecimi, #filtreSec, #filtreKaydet").forEach(el => el.remove());
         initScript();
     };
 
