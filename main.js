@@ -1,10 +1,9 @@
 (function () {
     'use strict';
 
-    let active = false;
+    let active = false; 
     let collectedASINs = [];
 
-    // Sağ üstte eklenti butonu ekleyelim
     const toggleButton = document.createElement("button");
     toggleButton.innerText = "Eklentiyi Aktif Et";
     toggleButton.style.position = "fixed";
@@ -29,7 +28,6 @@
         }
     });
 
-    // Kontrol panelini aç
     function openControlPanel() {
         const panel = document.createElement("div");
         panel.id = "customPanel";
@@ -60,7 +58,6 @@
         document.getElementById("startScraping").addEventListener("click", startScraping);
     }
 
-    // Satıcının mağazasındaki kategorileri çek
     function loadCategories() {
         const categoryContainer = document.getElementById("categoryList");
         categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
@@ -68,8 +65,8 @@
         document.querySelectorAll(".s-navigation-item").forEach(item => {
             const checkbox = document.createElement("input");
             checkbox.type = "checkbox";
-            checkbox.value = item.href; // Kategori linki
-            checkbox.dataset.name = item.innerText.trim(); // Kategori adı
+            checkbox.value = item.href; // Kategori linkini al
+            checkbox.dataset.name = item.innerText.trim(); // Kategori adını kaydet
             checkbox.style.marginRight = "5px";
 
             const label = document.createElement("label");
@@ -81,7 +78,6 @@
         });
     }
 
-    // Tarama başlat
     function startScraping() {
         const selectedCategories = [];
         document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
@@ -102,7 +98,6 @@
         processCategories(selectedCategories);
     }
 
-    // Tarama durumu göstermek için kutu oluştur
     function createProgressBox() {
         const progressBox = document.createElement("div");
         progressBox.id = "progressBox";
@@ -117,37 +112,37 @@
         document.body.appendChild(progressBox);
     }
 
-    function updateProgress(category, totalProducts) {
+    function updateProgress(category, page, totalProducts) {
         const progressBox = document.getElementById("progressBox");
         if (progressBox) {
-            progressBox.innerHTML = `Kategori: <b>${category}</b> <br> Toplam ASIN: ${totalProducts}`;
+            progressBox.innerHTML = `Kategori: <b>${category}</b> <br> Sayfa: ${page} <br> Toplam ASIN: ${totalProducts}`;
         }
     }
 
     async function processCategories(categories) {
         for (const category of categories) {
             let totalProducts = 0;
-            const fetchPromises = [];
 
+            // 1-400. sayfalar için paralel istekler gönder
+            const fetchPromises = [];
             for (let page = 1; page <= 400; page++) {
                 const url = category.url + `&page=${page}`;
-                fetchPromises.push(fetchASINs(url, category.name));
+                fetchPromises.push(fetchASINs(url, category.name, page));
             }
 
-            // Paralel tarama (Çok hızlı!)
+            // Tüm sayfaları paralel olarak işle
             const results = await Promise.all(fetchPromises);
             results.forEach(asins => {
                 collectedASINs.push(...asins);
                 totalProducts += asins.length;
             });
 
-            updateProgress(category.name, totalProducts);
+            updateProgress(category.name, "Tamamlandı", totalProducts);
         }
         generateExcel();
     }
 
-    // ASIN çekme fonksiyonu (Sayfa sayfa ilerlemeden, paralel çalışıyor!)
-    async function fetchASINs(url, categoryName) {
+    async function fetchASINs(url, categoryName, page) {
         try {
             const response = await fetch(url, { method: "GET" });
             const text = await response.text();
@@ -158,7 +153,7 @@
                 const asin = item.getAttribute("data-asin");
                 if (asin) asins.push(asin);
             });
-            updateProgress(categoryName, collectedASINs.length);
+            updateProgress(categoryName, page, collectedASINs.length);
             return asins;
         } catch (error) {
             console.error("ASIN çekme hatası:", error);
@@ -166,7 +161,6 @@
         }
     }
 
-    // ASIN'leri CSV olarak indir
     function generateExcel() {
         let csvContent = "data:text/csv;charset=utf-8,ASIN\n";
         collectedASINs.forEach(asin => {
