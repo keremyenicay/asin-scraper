@@ -153,26 +153,30 @@
     for (const category of categories) {
         collectedASINs = [];
         let totalProducts = 0;
-        const maxPages = 400; // 400 sayfaya kadar git
 
-        // 1'den 400'e kadar tüm sayfalar için fetch işlemini başlat
-        const fetchPromises = [];
-        for (let page = 1; page <= maxPages; page++) {
-            const url = category.url + `&page=${page}`;
-            fetchPromises.push(fetchASINs(url, category.name));
+        console.log(`🚀 ${category.name} kategorisi için tarama başlatıldı...`);
+
+        // İlk sayfadaki ASIN'leri al
+        await fetchASINs(category.url, category.name);
+
+        // Daha fazla ürün olup olmadığını kontrol et
+        let nextPage = 2;
+        let hasMorePages = true;
+
+        while (hasMorePages && nextPage <= 400) {
+            const nextPageUrl = category.url + `&page=${nextPage}`;
+            const asins = await fetchASINs(nextPageUrl, category.name);
+
+            if (asins.length === 0) {
+                console.log(`⏹ ${category.name} kategorisi için daha fazla ürün bulunamadı. Sayfa: ${nextPage}`);
+                hasMorePages = false; // Eğer ASIN bulunamazsa, taramayı durdur
+            } else {
+                totalProducts += asins.length;
+                nextPage++;
+            }
+
+            updateProgress(category.name, totalProducts);
         }
-
-        // Tüm sayfaları **paralel olarak** al
-        console.log(`🚀 ${category.name} kategorisi için paralel tarama başlatıldı...`);
-        const results = await Promise.all(fetchPromises);
-
-        // Sonuçları birleştir
-        results.forEach(asins => {
-            collectedASINs.push(...asins);
-            totalProducts += asins.length;
-        });
-
-        updateProgress(category.name, totalProducts);
     }
 
     generateExcel();
@@ -180,26 +184,28 @@
 
 async function fetchASINs(url, categoryName) {
     try {
+        console.log(`🔍 ${categoryName} | ${url} taranıyor...`);
+
+        // Amazon'un sunduğu XHR veya Fetch API'yi kullanarak daha fazla ürün al
         const response = await fetch(url, { method: "GET" });
         const text = await response.text();
         const parser = new DOMParser();
         const doc = parser.parseFromString(text, "text/html");
         const asins = [];
 
+        // Ürünlerin bulunduğu öğeleri al
         doc.querySelectorAll("div[data-asin]").forEach(item => {
             const asin = item.getAttribute("data-asin");
             if (asin) asins.push(asin);
         });
 
-        console.log(`🔍 ${categoryName} | ${url} | ${asins.length} ASIN bulundu.`);
+        console.log(`✅ ${categoryName} | ${url} | ${asins.length} ASIN bulundu.`);
         return asins;
     } catch (error) {
         console.error(`❌ Hata (${categoryName} - ${url}):`, error);
         return [];
     }
 }
-
-
 
     function generateExcel() {
         let csvContent = "data:text/csv;charset=utf-8,ASIN\n";
