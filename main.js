@@ -4,7 +4,6 @@
     let active = false;
     let collectedASINs = [];
 
-    // Eklenti Butonunu Oluştur
     function createToggleButton() {
         const button = document.createElement("button");
         button.innerText = "Eklentiyi Aktif Et";
@@ -31,7 +30,6 @@
         });
     }
 
-    // Kontrol Panelini Aç
     function openControlPanel() {
         const panel = document.createElement("div");
         panel.id = "customPanel";
@@ -62,43 +60,39 @@
         document.getElementById("startScraping").addEventListener("click", startScraping);
     }
 
-    // Satıcının mağazasındaki kategorileri çek
     function loadCategories() {
-    const categoryContainer = document.getElementById("categoryList");
-    categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
+        const categoryContainer = document.getElementById("categoryList");
+        categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
 
-    // Gizlenmesi gereken kategoriler
-    const excludedCategories = [
-        "4 Stars & Up & Up",
-        "New",
-        "All Discounts",
-        "Climate Pledge Friendly",
-        "Subscribe & Save",
-        "Include Out of Stock"
-    ];
+        const excludedCategories = [
+            "4 Stars & Up & Up",
+            "New",
+            "Climate Pledge Friendly",
+            "Amazon Global Store",
+            "Include Out of Stock"
+        ];
 
-    document.querySelectorAll(".s-navigation-item").forEach(item => {
-        const categoryName = item.innerText.trim();
-        if (excludedCategories.includes(categoryName)) {
-            return; // Gereksiz kategorileri atla
-        }
+        document.querySelectorAll(".s-navigation-item").forEach(item => {
+            const categoryName = item.innerText.trim();
+            if (excludedCategories.includes(categoryName)) {
+                return;
+            }
 
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.value = item.href;
-        checkbox.dataset.name = categoryName;
-        checkbox.style.marginRight = "5px";
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.value = item.href;
+            checkbox.dataset.name = categoryName;
+            checkbox.style.marginRight = "5px";
 
-        const label = document.createElement("label");
-        label.textContent = categoryName;
+            const label = document.createElement("label");
+            label.textContent = categoryName;
 
-        categoryContainer.appendChild(checkbox);
-        categoryContainer.appendChild(label);
-        categoryContainer.appendChild(document.createElement("br"));
-    });
-}
+            categoryContainer.appendChild(checkbox);
+            categoryContainer.appendChild(label);
+            categoryContainer.appendChild(document.createElement("br"));
+        });
+    }
 
-    // Tarama Başlat
     function startScraping() {
         const selectedCategories = [];
         document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
@@ -119,7 +113,6 @@
         processCategories(selectedCategories);
     }
 
-    // Tarama durumunu göstermek için kutu oluştur
     function createProgressBox() {
         const progressBox = document.createElement("div");
         progressBox.id = "progressBox";
@@ -144,22 +137,53 @@
     async function processCategories(categories) {
         for (const category of categories) {
             let totalProducts = 0;
-            const fetchPromises = [];
+            let allASINs = [];
 
-            for (let page = 1; page <= 400; page++) {
-                const url = category.url + `&page=${page}`;
-                fetchPromises.push(fetchASINs(url, category.name));
+            for (let batchStart = 1; batchStart <= 400; batchStart += 10) {
+                const batchPromises = [];
+
+                for (let page = batchStart; page < batchStart + 10 && page <= 400; page++) {
+                    const url = `${category.url}&page=${page}`;
+                    batchPromises.push(fetchASINs(url, category.name));
+                }
+
+                const results = await Promise.all(batchPromises);
+                results.forEach(asins => {
+                    allASINs.push(...asins);
+                    totalProducts += asins.length;
+                });
+
+                updateProgress(category.name, totalProducts);
             }
 
-            const results = await Promise.all(fetchPromises);
-            results.forEach(asins => {
-                collectedASINs.push(...asins);
-                totalProducts += asins.length;
-            });
-
-            updateProgress(category.name, totalProducts);
+            collectedASINs.push(...allASINs);
         }
         generateExcel();
+    }
+
+    async function fetchASINs(url, categoryName) {
+        try {
+            const response = await fetch(url);
+            const text = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(text, "text/html");
+
+            const asinElements = doc.querySelectorAll("div[data-asin]:not([data-asin=''])");
+            return [...asinElements].map(el => el.getAttribute("data-asin"));
+        } catch (error) {
+            console.error(`Hata: ${url}`, error);
+            return [];
+        }
+    }
+
+    function generateExcel() {
+        const blob = new Blob([collectedASINs.join("\n")], { type: "text/plain" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "asin_list.txt";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     }
 
     createToggleButton();
