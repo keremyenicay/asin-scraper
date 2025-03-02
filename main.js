@@ -46,7 +46,7 @@
         panel.style.overflow = "hidden";
         document.body.appendChild(panel);
 
-        panel.innerHTML = 
+        panel.innerHTML = `
             <h3 style="text-align:center;">ASIN Tarayıcı</h3>
             <div style="display:flex; height: 90%;">
                 <div id="categoryList" style="width: 50%; overflow-y: auto; border-right: 1px solid gray; padding: 10px;"></div>
@@ -54,7 +54,7 @@
                     <button id="startScraping" style="padding: 10px; font-size: 16px; background-color: blue; color: white; border: none; cursor: pointer;">Tarama Başlat</button>
                 </div>
             </div>
-        ;
+        `;
 
         loadCategories();
         document.getElementById("startScraping").addEventListener("click", startScraping);
@@ -120,7 +120,7 @@
     function updateProgress(category, totalProducts) {
         const progressBox = document.getElementById("progressBox");
         if (progressBox) {
-            progressBox.innerHTML = Kategori: <b>${category}</b> <br> Toplam ASIN: ${totalProducts};
+            progressBox.innerHTML = `Kategori: <b>${category}</b> <br> Toplam ASIN: ${totalProducts}`;
         }
     }
 
@@ -130,7 +130,7 @@
             const fetchPromises = [];
 
             for (let page = 1; page <= 400; page++) {
-                const url = category.url + &page=${page};
+                const url = category.url + `&page=${page}`;
                 fetchPromises.push(fetchASINs(url, category.name));
             }
 
