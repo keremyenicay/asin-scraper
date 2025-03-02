@@ -150,46 +150,55 @@
     }
 
     async function processCategories(categories) {
-        for (const category of categories) {
-            let totalProducts = 0;
-            const fetchPromises = [];
+    for (const category of categories) {
+        collectedASINs = [];
+        let totalProducts = 0;
+        const maxPages = 400; // 400 sayfaya kadar git
 
-            for (let page = 1; page <= 400; page++) {
-                const url = category.url + `&page=${page}`;
-                fetchPromises.push(fetchASINs(url, category.name));
-            }
-
-            // Paralel tarama (Çok hızlı!)
-            const results = await Promise.all(fetchPromises);
-            results.forEach(asins => {
-                collectedASINs.push(...asins);
-                totalProducts += asins.length;
-            });
-
-            updateProgress(category.name, totalProducts);
+        // 1'den 400'e kadar tüm sayfalar için fetch işlemini başlat
+        const fetchPromises = [];
+        for (let page = 1; page <= maxPages; page++) {
+            const url = category.url + `&page=${page}`;
+            fetchPromises.push(fetchASINs(url, category.name));
         }
-        generateExcel();
+
+        // Tüm sayfaları **paralel olarak** al
+        console.log(`🚀 ${category.name} kategorisi için paralel tarama başlatıldı...`);
+        const results = await Promise.all(fetchPromises);
+
+        // Sonuçları birleştir
+        results.forEach(asins => {
+            collectedASINs.push(...asins);
+            totalProducts += asins.length;
+        });
+
+        updateProgress(category.name, totalProducts);
     }
 
-    // ASIN çekme fonksiyonu (Sayfa sayfa ilerlemeden, paralel çalışıyor!)
-    async function fetchASINs(url, categoryName) {
-        try {
-            const response = await fetch(url, { method: "GET" });
-            const text = await response.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(text, "text/html");
-            const asins = [];
-            doc.querySelectorAll("div[data-asin]").forEach(item => {
-                const asin = item.getAttribute("data-asin");
-                if (asin) asins.push(asin);
-            });
-            updateProgress(categoryName, collectedASINs.length);
-            return asins;
-        } catch (error) {
-            console.error("ASIN çekme hatası:", error);
-            return [];
-        }
+    generateExcel();
+}
+
+async function fetchASINs(url, categoryName) {
+    try {
+        const response = await fetch(url, { method: "GET" });
+        const text = await response.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(text, "text/html");
+        const asins = [];
+
+        doc.querySelectorAll("div[data-asin]").forEach(item => {
+            const asin = item.getAttribute("data-asin");
+            if (asin) asins.push(asin);
+        });
+
+        console.log(`🔍 ${categoryName} | ${url} | ${asins.length} ASIN bulundu.`);
+        return asins;
+    } catch (error) {
+        console.error(`❌ Hata (${categoryName} - ${url}):`, error);
+        return [];
     }
+}
+
 
 
     function generateExcel() {
