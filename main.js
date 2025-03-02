@@ -3,7 +3,7 @@
 
     let active = false;
     let collectedASINs = [];
-
+    
     function createToggleButton() {
         const button = document.createElement("button");
         button.innerText = "Eklentiyi Aktif Et";
@@ -43,25 +43,24 @@
         panel.style.border = "2px solid black";
         panel.style.zIndex = "10000";
         panel.style.padding = "10px";
-        panel.style.overflow = "hidden";
         document.body.appendChild(panel);
 
         panel.innerHTML = `
             <h3 style="text-align:center;">ASIN Tarayıcı</h3>
-            <div style="display:flex; height: 90%;">
-                <div id="categoryList" style="width: 50%; overflow-y: auto; border-right: 1px solid gray; padding: 10px;"></div>
-                <div style="width: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                    <button id="selectAllCategories" style="padding: 5px; margin: 5px; background-color: orange; color: white; border: none; cursor: pointer;">Hepsini Seç</button>
-                    <button id="clearAllCategories" style="padding: 5px; margin: 5px; background-color: gray; color: white; border: none; cursor: pointer;">Seçimi Temizle</button>
-                    <button id="startScraping" style="padding: 10px; font-size: 16px; background-color: blue; color: white; border: none; cursor: pointer;">Tarama Başlat</button>
-                </div>
-            </div>
+            <button id="selectAll">Hepsini Seç</button>
+            <button id="clearSelection">Seçimi Temizle</button>
+            <div id="categoryList" style="height: 80%; overflow-y: auto; border: 1px solid gray; padding: 10px;"></div>
+            <button id="startScraping" style="margin-top: 10px; width: 100%; padding: 10px;">Tarama Başlat</button>
         `;
-
+        
         loadCategories();
-        document.getElementById("selectAllCategories").addEventListener("click", selectAllCategories);
-        document.getElementById("clearAllCategories").addEventListener("click", clearAllCategories);
         document.getElementById("startScraping").addEventListener("click", startScraping);
+        document.getElementById("selectAll").addEventListener("click", () => {
+            document.querySelectorAll("#categoryList input").forEach(cb => cb.checked = true);
+        });
+        document.getElementById("clearSelection").addEventListener("click", () => {
+            document.querySelectorAll("#categoryList input").forEach(cb => cb.checked = false);
+        });
     }
 
     function loadCategories() {
@@ -78,9 +77,7 @@
 
         document.querySelectorAll(".s-navigation-item").forEach(item => {
             const categoryName = item.innerText.trim();
-            if (excludedCategories.includes(categoryName)) {
-                return;
-            }
+            if (excludedCategories.includes(categoryName)) return;
 
             const checkbox = document.createElement("input");
             checkbox.type = "checkbox";
@@ -97,25 +94,10 @@
         });
     }
 
-    function selectAllCategories() {
-        document.querySelectorAll("#categoryList input[type='checkbox']").forEach(checkbox => {
-            checkbox.checked = true;
-        });
-    }
-
-    function clearAllCategories() {
-        document.querySelectorAll("#categoryList input[type='checkbox']").forEach(checkbox => {
-            checkbox.checked = false;
-        });
-    }
-
     function startScraping() {
         const selectedCategories = [];
         document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
-            selectedCategories.push({
-                url: checkbox.value,
-                name: checkbox.dataset.name
-            });
+            selectedCategories.push({ url: checkbox.value, name: checkbox.dataset.name });
         });
 
         if (selectedCategories.length === 0) {
@@ -151,28 +133,24 @@
     }
 
     async function processCategories(categories) {
-        await Promise.all(categories.map(category => processCategory(category)));
-        generateExcel();
-    }
-
-    async function processCategory(category) {
-        let totalProducts = 0;
-        const fetchPromises = [];
-
-        for (let page = 1; page <= 400; page++) {
-            const url = category.url + `&page=${page}`;
-            fetchPromises.push(fetchASINs(url, category.name));
-        }
-
-        const results = await Promise.allSettled(fetchPromises);
-        results.forEach(result => {
-            if (result.status === "fulfilled") {
-                collectedASINs.push(...result.value);
-                totalProducts += result.value.length;
+        for (const category of categories) {
+            let totalProducts = 0;
+            const fetchPromises = [];
+            
+            for (let page = 1; page <= 400; page++) {
+                const url = category.url + `&page=${page}`;
+                fetchPromises.push(fetchASINs(url, category.name));
             }
-        });
 
-        updateProgress(category.name, totalProducts);
+            const results = await Promise.all(fetchPromises);
+            results.forEach(asins => {
+                collectedASINs.push(...asins);
+                totalProducts += asins.length;
+            });
+
+            updateProgress(category.name, totalProducts);
+        }
+        generateExcel();
     }
 
     createToggleButton();
