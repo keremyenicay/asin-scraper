@@ -66,7 +66,7 @@
         document.querySelectorAll(".s-navigation-item").forEach(item => {
             const checkbox = document.createElement("input");
             checkbox.type = "checkbox";
-            checkbox.value = item.innerText.trim();
+            checkbox.value = item.href; // Kategori linkini al
             checkbox.style.marginRight = "5px";
 
             const label = document.createElement("label");
@@ -109,44 +109,45 @@
         document.body.appendChild(progressBox);
     }
 
-    function updateProgress(category, page) {
+    function updateProgress(category, page, totalProducts) {
         const progressBox = document.getElementById("progressBox");
         if (progressBox) {
-            progressBox.innerHTML = `Kategori: ${category} <br> Sayfa: ${page}`;
+            progressBox.innerHTML = `Kategori: ${category} <br> Sayfa: ${page} <br> Toplam ASIN: ${totalProducts}`;
         }
     }
 
     async function processCategories(categories) {
-        for (const category of categories) {
+        for (const categoryURL of categories) {
+            let totalProducts = 0;
             for (let page = 1; page <= 400; page++) {
-                updateProgress(category, page);
-                const asins = getASINs();
+                const url = `${categoryURL}&page=${page}`;
+                const asins = await fetchASINs(url);
+                if (asins.length === 0) break; // Eğer hiç ürün yoksa çık
                 collectedASINs.push(...asins);
-
-                if (!goToNextPage()) break; // Sonraki sayfa yoksa dur
-
-                await new Promise(resolve => setTimeout(resolve, 1500)); // 1.5 saniye bekle
+                totalProducts += asins.length;
+                updateProgress(categoryURL, page, totalProducts);
+                await new Promise(resolve => setTimeout(resolve, 1000)); // 1 saniye bekle
             }
         }
         generateExcel();
     }
 
-    function getASINs() {
-        const asins = [];
-        document.querySelectorAll("div[data-asin]").forEach(item => {
-            const asin = item.getAttribute("data-asin");
-            if (asin) asins.push(asin);
-        });
-        return asins;
-    }
-
-    function goToNextPage() {
-        const nextPage = document.querySelector(".s-pagination-next");
-        if (nextPage && !nextPage.classList.contains("s-pagination-disabled")) {
-            nextPage.click();
-            return true;
+    async function fetchASINs(url) {
+        try {
+            const response = await fetch(url, { method: "GET" });
+            const text = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(text, "text/html");
+            const asins = [];
+            doc.querySelectorAll("div[data-asin]").forEach(item => {
+                const asin = item.getAttribute("data-asin");
+                if (asin) asins.push(asin);
+            });
+            return asins;
+        } catch (error) {
+            console.error("ASIN çekme hatası:", error);
+            return [];
         }
-        return false;
     }
 
     function generateExcel() {
