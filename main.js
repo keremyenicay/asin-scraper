@@ -72,21 +72,15 @@
         const categoryContainer = document.getElementById("categoryList");
         categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
 
-        const excludedCategories = [
-            "4 Stars & Up & Up",
-            "New",
-            "Climate Pledge Friendly",
-            "Amazon Global Store",
-            "Include Out of Stock"
-        ];
-
         document.querySelectorAll(".s-navigation-item").forEach(item => {
             const categoryName = item.innerText.trim();
-            if (excludedCategories.includes(categoryName)) return;
+            const categoryURL = item.href;
+
+            if (!categoryName || categoryName.includes("& Up") || categoryName.includes("New")) return;
 
             const checkbox = document.createElement("input");
             checkbox.type = "checkbox";
-            checkbox.value = item.href;
+            checkbox.value = categoryURL;
             checkbox.dataset.name = categoryName;
             checkbox.style.marginRight = "5px";
 
@@ -99,7 +93,28 @@
         });
     }
 
-    function startScraping() {
+    async function getSubCategories(categoryURL) {
+        try {
+            const response = await fetch(categoryURL);
+            const text = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(text, "text/html");
+            const subCategories = [];
+
+            doc.querySelectorAll(".s-navigation-item").forEach(link => {
+                if (link.href.includes("rh=n:")) {
+                    subCategories.push(link.href);
+                }
+            });
+
+            return subCategories.length ? subCategories : [categoryURL];
+        } catch (error) {
+            console.error("Alt kategorileri çekerken hata oluştu:", error);
+            return [categoryURL];
+        }
+    }
+
+    async function startScraping() {
         const selectedCategories = [];
         document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
             selectedCategories.push({
@@ -116,84 +131,55 @@
         collectedASINs = [];
         document.getElementById("customPanel").remove();
         createProgressBox();
-        processCategories(selectedCategories);
+
+        for (const category of selectedCategories) {
+            const subCategories = await getSubCategories(category.url);
+            for (const subCategory of subCategories) {
+                await processCategory(subCategory, category.name);
+            }
+        }
+
+        generateExcel();
     }
 
-    function createProgressBox() {
-        const progressBox = document.createElement("div");
-        progressBox.id = "progressBox";
-        progressBox.style.position = "fixed";
-        progressBox.style.bottom = "10px";
-        progressBox.style.right = "10px";
-        progressBox.style.backgroundColor = "black";
-        progressBox.style.color = "white";
-        progressBox.style.padding = "10px";
-        progressBox.style.border = "1px solid white";
-        progressBox.style.zIndex = "9999";
-        document.body.appendChild(progressBox);
+    async function processCategory(categoryURL, categoryName) {
+        let totalProducts = 0;
+        let page = 1;
+
+        while (page <= 400) {
+            const url = `${categoryURL}&page=${page}`;
+            const asins = await fetchASINs(url);
+            collectedASINs.push(...asins);
+            totalProducts += asins.length;
+            updateProgress(categoryName, totalProducts);
+            if (asins.length === 0) break;
+            page++;
+        }
     }
 
     function updateProgress(category, totalProducts) {
-        const progressBox = document.getElementById("progressBox");
-        if (progressBox) {
-            progressBox.innerHTML = `Kategori: <b>${category}</b> <br> Toplam ASIN: ${totalProducts}`;
-        }
-    }
-
-    async function processCategories(categories) {
-        for (const category of categories) {
-            let totalProducts = 0;
-            let page = 1;
-            let hasMorePages = true;
-
-            while (hasMorePages && page <= 400) {
-                const fetchPromises = [];
-                for (let i = 0; i < 5 && page <= 400; i++, page++) {
-                    const url = category.url + `&page=${page}`;
-                    fetchPromises.push(fetchASINs(url, category.name));
-                }
-
-                const results = await Promise.all(fetchPromises);
-                results.forEach(asins => {
-                    collectedASINs.push(...asins);
-                    totalProducts += asins.length;
-                });
-
-                updateProgress(category.name, totalProducts);
-
-                if (results.every(asins => asins.length === 0)) {
-                    hasMorePages = false;
-                }
-            }
-        }
-        generateExcel();
+        document.getElementById("progressBox").innerHTML = `Kategori: <b>${category}</b> <br> Toplam ASIN: ${totalProducts}`;
     }
 
     async function fetchASINs(url) {
         try {
             const response = await fetch(url);
             const text = await response.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(text, "text/html");
-
-            const asins = [];
-            doc.querySelectorAll("div[data-asin]").forEach(el => {
-                const asin = el.getAttribute("data-asin");
-                if (asin) asins.push(asin);
-            });
-
-            return asins;
+            const doc = new DOMParser().parseFromString(text, "text/html");
+            return Array.from(doc.querySelectorAll("div[data-asin]")).map(el => el.getAttribute("data-asin"));
         } catch (error) {
-            console.error(`ASIN çekme hatası: ${error}`);
+            console.error("ASIN çekme hatası:", error);
             return [];
         }
     }
+
     function generateExcel() {
         const blob = new Blob([collectedASINs.join("\n")], { type: "text/csv" });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
         link.download = "asins.csv";
-        link.click(); 
-    }        
+        link.click();
+    }
+
     createToggleButton();
 })();
