@@ -43,14 +43,19 @@
         panel.style.border = "2px solid black";
         panel.style.zIndex = "10000";
         panel.style.padding = "10px";
+        panel.style.overflow = "hidden";
         document.body.appendChild(panel);
 
         panel.innerHTML = `
             <h3 style="text-align:center;">ASIN Tarayıcı</h3>
-            <button id="selectAll" style="margin-bottom: 10px;">Hepsini Seç</button>
-            <button id="clearSelection" style="margin-bottom: 10px;">Seçimi Temizle</button>
-            <div id="categoryList" style="max-height: 300px; overflow-y: auto;"></div>
-            <button id="startScraping" style="margin-top: 10px; padding: 10px; width: 100%; background-color: blue; color: white;">Tarama Başlat</button>
+            <div style="display:flex; height: 90%;">
+                <div id="categoryList" style="width: 50%; overflow-y: auto; border-right: 1px solid gray; padding: 10px;"></div>
+                <div style="width: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                    <button id="selectAll" style="margin-bottom: 10px; padding: 5px;">Hepsini Seç</button>
+                    <button id="clearSelection" style="margin-bottom: 10px; padding: 5px;">Seçimi Temizle</button>
+                    <button id="startScraping" style="padding: 10px; font-size: 16px; background-color: blue; color: white; border: none; cursor: pointer;">Tarama Başlat</button>
+                </div>
+            </div>
         `;
 
         loadCategories();
@@ -68,7 +73,11 @@
         categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
 
         const excludedCategories = [
-            "4 Stars & Up & Up", "New", "Climate Pledge Friendly", "Amazon Global Store", "Include Out of Stock"
+            "4 Stars & Up & Up",
+            "New",
+            "Climate Pledge Friendly",
+            "Amazon Global Store",
+            "Include Out of Stock"
         ];
 
         document.querySelectorAll(".s-navigation-item").forEach(item => {
@@ -90,13 +99,16 @@
         });
     }
 
-    async function startScraping() {
-        const selectedCategories = Array.from(document.querySelectorAll("#categoryList input:checked")).map(cb => ({
-            url: cb.value,
-            name: cb.dataset.name
-        }));
+    function startScraping() {
+        const selectedCategories = [];
+        document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
+            selectedCategories.push({
+                url: checkbox.value,
+                name: checkbox.dataset.name
+            });
+        });
 
-        if (!selectedCategories.length) {
+        if (selectedCategories.length === 0) {
             alert("Lütfen en az bir kategori seçin!");
             return;
         }
@@ -104,7 +116,7 @@
         collectedASINs = [];
         document.getElementById("customPanel").remove();
         createProgressBox();
-        await processCategories(selectedCategories);
+        processCategories(selectedCategories);
     }
 
     function createProgressBox() {
@@ -122,19 +134,36 @@
     }
 
     function updateProgress(category, totalProducts) {
-        document.getElementById("progressBox").innerHTML = `Kategori: <b>${category}</b> <br> Toplam ASIN: ${totalProducts}`;
+        const progressBox = document.getElementById("progressBox");
+        if (progressBox) {
+            progressBox.innerHTML = `Kategori: <b>${category}</b> <br> Toplam ASIN: ${totalProducts}`;
+        }
     }
 
     async function processCategories(categories) {
         for (const category of categories) {
             let totalProducts = 0;
-            for (let page = 1; page <= 400; page++) {
-                const url = `${category.url}&page=${page}`;
-                const asins = await fetchASINs(url);
-                collectedASINs.push(...asins);
-                totalProducts += asins.length;
+            let page = 1;
+            let hasMorePages = true;
+
+            while (hasMorePages && page <= 400) {
+                const fetchPromises = [];
+                for (let i = 0; i < 5 && page <= 400; i++, page++) {
+                    const url = category.url + `&page=${page}`;
+                    fetchPromises.push(fetchASINs(url, category.name));
+                }
+
+                const results = await Promise.all(fetchPromises);
+                results.forEach(asins => {
+                    collectedASINs.push(...asins);
+                    totalProducts += asins.length;
+                });
+
                 updateProgress(category.name, totalProducts);
-                if (asins.length === 0) break;
+
+                if (results.every(asins => asins.length === 0)) {
+                    hasMorePages = false;
+                }
             }
         }
         generateExcel();
@@ -146,21 +175,18 @@
             const text = await response.text();
             const parser = new DOMParser();
             const doc = parser.parseFromString(text, "text/html");
-            return Array.from(doc.querySelectorAll("[data-asin]"))
-                .map(el => el.getAttribute("data-asin"))
-                .filter(asin => asin);
+
+            const asins = [];
+            doc.querySelectorAll("div[data-asin]").forEach(el => {
+                const asin = el.getAttribute("data-asin");
+                if (asin) asins.push(asin);
+            });
+
+            return asins;
         } catch (error) {
-            console.error("ASIN çekme hatası:", error);
+            console.error(`ASIN çekme hatası: ${error}`);
             return [];
         }
-    }
-
-    function generateExcel() {
-        const blob = new Blob([collectedASINs.join("\n")], { type: "text/csv" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = "asins.csv";
-        link.click();
     }
 
     createToggleButton();
