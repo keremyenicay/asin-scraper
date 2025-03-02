@@ -152,25 +152,21 @@
     async function processCategories(categories) {
     for (const category of categories) {
         let totalProducts = 0;
-        let page = 1;
-        let hasMorePages = true;
         collectedASINs = [];
+        const maxPages = 400; // En fazla 400 sayfa taransın
 
-        while (hasMorePages) {
+        for (let page = 1; page <= maxPages; page++) {
             const url = category.url + `&page=${page}`;
             console.log(`🔍 Sayfa taranıyor: ${url}`);
-            
-            const asins = await fetchASINs(url, category.name);
-            collectedASINs.push(...asins);
-            totalProducts += asins.length;
 
-            // Ürün var mı kontrol et, yoksa çık
+            const asins = await fetchASINs(url, category.name);
             if (asins.length === 0) {
-                hasMorePages = false;
-            } else {
-                page++; // Sonraki sayfaya geç
+                console.log("❌ Ürün bulunamadı, tarama durduruluyor.");
+                break; // Ürün yoksa döngüyü bitir
             }
 
+            collectedASINs.push(...asins);
+            totalProducts += asins.length;
             updateProgress(category.name, totalProducts);
         }
     }
@@ -198,6 +194,7 @@ async function fetchASINs(url, categoryName) {
         return [];
     }
 }
+
 
     function generateExcel() {
         let csvContent = "data:text/csv;charset=utf-8,ASIN\n";
