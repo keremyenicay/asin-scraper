@@ -1,10 +1,9 @@
 (function () {
     'use strict';
 
-    let active = false; // Tarayıcı aktif mi değil mi?
-    let collectedASINs = []; // ASIN'leri saklamak için dizi
+    let active = false; 
+    let collectedASINs = [];
 
-    // Eklentiyi başlatma butonu (Sağ Üst)
     const toggleButton = document.createElement("button");
     toggleButton.innerText = "Eklentiyi Aktif Et";
     toggleButton.style.position = "fixed";
@@ -120,13 +119,13 @@
         for (const categoryURL of categories) {
             let totalProducts = 0;
             for (let page = 1; page <= 400; page++) {
-                const url = `${categoryURL}&page=${page}`;
+                const url = categoryURL + `&page=${page}`;
                 const asins = await fetchASINs(url);
-                if (asins.length === 0) break; // Eğer hiç ürün yoksa çık
+                if (asins.length === 0) break; 
                 collectedASINs.push(...asins);
                 totalProducts += asins.length;
                 updateProgress(categoryURL, page, totalProducts);
-                await new Promise(resolve => setTimeout(resolve, 1000)); // 1 saniye bekle
+                await new Promise(resolve => setTimeout(resolve, 1000)); 
             }
         }
         generateExcel();
