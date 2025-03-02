@@ -1,11 +1,11 @@
 (function () {
     'use strict';
 
-    document.addEventListener("DOMContentLoaded", function () {
+    window.onload = function () {
         let active = false;
         let collectedASINs = [];
 
-        // Sağ üstte eklenti butonunu ekleyelim
+        // Sağ üstte eklenti butonu ekleyelim
         const toggleButton = document.createElement("button");
         toggleButton.innerText = "Eklentiyi Aktif Et";
         toggleButton.style.position = "fixed";
@@ -30,10 +30,7 @@
             }
         });
 
-        // Kontrol panelini aç
         function openControlPanel() {
-            if (document.getElementById("customPanel")) return;
-
             const panel = document.createElement("div");
             panel.id = "customPanel";
             panel.style.position = "fixed";
@@ -63,135 +60,24 @@
             document.getElementById("startScraping").addEventListener("click", startScraping);
         }
 
-        // Satıcının mağazasındaki kategorileri çek
         function loadCategories() {
             const categoryContainer = document.getElementById("categoryList");
             categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
 
             document.querySelectorAll(".s-navigation-item").forEach(item => {
-                const categoryName = item.innerText.trim();
-                if (["4 Stars & Up & Up", "New", "All Discounts", "Climate Pledge Friendly", "Amazon Global Store", "Include Out of Stock"].includes(categoryName)) {
-                    return; // Gereksiz kategorileri alma
-                }
-
                 const checkbox = document.createElement("input");
                 checkbox.type = "checkbox";
                 checkbox.value = item.href;
-                checkbox.dataset.name = categoryName;
+                checkbox.dataset.name = item.innerText.trim();
                 checkbox.style.marginRight = "5px";
 
                 const label = document.createElement("label");
-                label.textContent = categoryName;
+                label.textContent = item.innerText.trim();
 
                 categoryContainer.appendChild(checkbox);
                 categoryContainer.appendChild(label);
                 categoryContainer.appendChild(document.createElement("br"));
             });
         }
-
-        // Tarama başlat
-        function startScraping() {
-            const selectedCategories = [];
-            document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
-                selectedCategories.push({
-                    url: checkbox.value,
-                    name: checkbox.dataset.name
-                });
-            });
-
-            if (selectedCategories.length === 0) {
-                alert("Lütfen en az bir kategori seçin!");
-                return;
-            }
-
-            collectedASINs = [];
-            document.getElementById("customPanel").remove();
-            createProgressBox();
-            processCategories(selectedCategories);
-        }
-
-        // Tarama durumu göstermek için kutu oluştur
-        function createProgressBox() {
-            if (document.getElementById("progressBox")) return;
-
-            const progressBox = document.createElement("div");
-            progressBox.id = "progressBox";
-            progressBox.style.position = "fixed";
-            progressBox.style.bottom = "10px";
-            progressBox.style.right = "10px";
-            progressBox.style.backgroundColor = "black";
-            progressBox.style.color = "white";
-            progressBox.style.padding = "10px";
-            progressBox.style.border = "1px solid white";
-            progressBox.style.zIndex = "9999";
-            document.body.appendChild(progressBox);
-        }
-
-        function updateProgress(category, totalProducts) {
-            const progressBox = document.getElementById("progressBox");
-            if (progressBox) {
-                progressBox.innerHTML = `Kategori: <b>${category}</b> <br> Toplam ASIN: ${totalProducts}`;
-            }
-        }
-
-        async function processCategories(categories) {
-            for (const category of categories) {
-                let totalProducts = 0;
-                const fetchPromises = [];
-
-                for (let page = 1; page <= 400; page++) {
-                    const url = category.url + `&page=${page}`;
-                    fetchPromises.push(fetchASINs(url, category.name));
-                }
-
-                // Paralel tarama
-                const results = await Promise.all(fetchPromises);
-                results.forEach(asins => {
-                    collectedASINs.push(...asins);
-                    totalProducts += asins.length;
-                });
-
-                updateProgress(category.name, totalProducts);
-            }
-            generateExcel();
-        }
-
-        // ASIN çekme fonksiyonu
-        async function fetchASINs(url, categoryName) {
-            try {
-                const response = await fetch(url, { method: "GET" });
-                const text = await response.text();
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(text, "text/html");
-                const asins = [];
-                doc.querySelectorAll("div[data-asin]").forEach(item => {
-                    const asin = item.getAttribute("data-asin");
-                    if (asin) asins.push(asin);
-                });
-                updateProgress(categoryName, collectedASINs.length);
-                return asins;
-            } catch (error) {
-                console.error("ASIN çekme hatası:", error);
-                return [];
-            }
-        }
-
-        // ASIN'leri CSV olarak indir
-        function generateExcel() {
-            let csvContent = "data:text/csv;charset=utf-8,ASIN\n";
-            collectedASINs.forEach(asin => {
-                csvContent += asin + "\n";
-            });
-
-            const encodedUri = encodeURI(csvContent);
-            const link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
-            link.setAttribute("download", "amazon_asins.csv");
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-
-            alert("Tarama tamamlandı! ASIN'ler indirildi.");
-        }
-    });
+    };
 })();
