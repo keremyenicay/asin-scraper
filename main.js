@@ -1,83 +1,67 @@
-// main.js - Güncellenmiş Versiyon
-
-(function () {
+// Eklentiyi aktif et butonu ekleyelim ve filtreyi düzgün yükleyelim
+(function() {
     'use strict';
 
-    const STORAGE_KEY = 'savedFilters';
-    let savedFilters = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
-
-    function saveFilter(name, categories) {
-        savedFilters[name] = categories;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(savedFilters));
+    // Eklentiyi aktif et butonu oluştur
+    function createActivateButton() {
+        let button = document.createElement('button');
+        button.innerText = 'Eklentiyi Aktif Et';
+        button.style.position = 'fixed';
+        button.style.top = '10px';
+        button.style.right = '10px';
+        button.style.backgroundColor = 'yellow';
+        button.style.color = 'black';
+        button.style.padding = '10px';
+        button.style.border = 'none';
+        button.style.cursor = 'pointer';
+        button.style.zIndex = '9999';
+        document.body.appendChild(button);
+        
+        button.addEventListener('click', function() {
+            button.remove();
+            showCategorySelection();
+        });
     }
 
-    function loadFilter(name) {
-        return savedFilters[name] || [];
-    }
-
-    function createUI() {
-        const container = document.createElement('div');
+    // Kategori seçim ekranını göster
+    function showCategorySelection() {
+        let container = document.createElement('div');
+        container.id = 'category-container';
         container.style.position = 'fixed';
         container.style.top = '50px';
-        container.style.left = '50px';
-        container.style.width = '400px';
-        container.style.height = '500px';
-        container.style.background = 'white';
+        container.style.left = '50%';
+        container.style.transform = 'translateX(-50%)';
+        container.style.width = '600px';
+        container.style.height = '400px';
+        container.style.backgroundColor = 'white';
+        container.style.boxShadow = '0 0 10px rgba(0, 0, 0, 0.5)';
+        container.style.overflowY = 'scroll';
+        container.style.padding = '20px';
         container.style.zIndex = '9999';
-        container.style.overflowY = 'auto';
-        container.style.padding = '10px';
-        container.style.border = '1px solid black';
+        document.body.appendChild(container);
+        
+        // Kategorileri yükle
+        loadCategories(container);
+    }
 
-        const title = document.createElement('h3');
-        title.innerText = 'Kategori Seçimi';
-        container.appendChild(title);
+    // Kategorileri getir ve listeye ekle
+    function loadCategories(container) {
+        let categories = ["Electronics", "Automotive", "Home & Kitchen", "Toys & Games", "Clothing", "Books"];
+        let categoryList = document.createElement('div');
 
-        const filterSelect = document.createElement('select');
-        filterSelect.innerHTML = '<option value="">Filtre Seç</option>' + 
-            Object.keys(savedFilters).map(f => `<option value="${f}">${f}</option>`).join('');
-        filterSelect.addEventListener('change', function() {
-            const selectedFilter = filterSelect.value;
-            if (selectedFilter) {
-                const categories = loadFilter(selectedFilter);
-                document.querySelectorAll('.category-checkbox').forEach(cb => {
-                    cb.checked = categories.includes(cb.value);
-                });
-            }
-        });
-        container.appendChild(filterSelect);
-
-        const categoryList = document.createElement('div');
-        categoryList.style.maxHeight = '300px';
-        categoryList.style.overflowY = 'scroll';
-        container.appendChild(categoryList);
-
-        const categories = ['Electronics', 'Books', 'Home & Kitchen', 'Toys']; // Örnek kategoriler
         categories.forEach(category => {
-            const label = document.createElement('label');
-            const checkbox = document.createElement('input');
+            let label = document.createElement('label');
+            let checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
-            checkbox.className = 'category-checkbox';
             checkbox.value = category;
             label.appendChild(checkbox);
-            label.appendChild(document.createTextNode(category));
+            label.appendChild(document.createTextNode(' ' + category));
             categoryList.appendChild(label);
             categoryList.appendChild(document.createElement('br'));
         });
-
-        const saveFilterBtn = document.createElement('button');
-        saveFilterBtn.innerText = 'Filtreyi Kaydet';
-        saveFilterBtn.addEventListener('click', function () {
-            const selectedCategories = [...document.querySelectorAll('.category-checkbox:checked')].map(cb => cb.value);
-            const filterName = prompt('Filtre Adı Girin:');
-            if (filterName) {
-                saveFilter(filterName, selectedCategories);
-                alert('Filtre kaydedildi!');
-            }
-        });
-        container.appendChild(saveFilterBtn);
-
-        document.body.appendChild(container);
+        
+        container.appendChild(categoryList);
     }
 
-    createUI();
+    createActivateButton();
 })();
