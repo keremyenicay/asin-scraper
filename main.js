@@ -4,33 +4,45 @@
     let active = false;
     let collectedASINs = [];
 
-    // Sağ üstte eklenti butonu ekleyelim
-    const toggleButton = document.createElement("button");
-    toggleButton.innerText = "Eklentiyi Aktif Et";
-    toggleButton.style.position = "fixed";
-    toggleButton.style.top = "10px";
-    toggleButton.style.right = "10px";
-    toggleButton.style.padding = "10px";
-    toggleButton.style.zIndex = "9999";
-    toggleButton.style.backgroundColor = "red";
-    toggleButton.style.color = "white";
-    toggleButton.style.border = "none";
-    toggleButton.style.cursor = "pointer";
-    document.body.appendChild(toggleButton);
+    // Sayfa tamamen yüklendiğinde başlat
+    window.onload = function() {
+        console.log("✅ Sayfa yüklendi, script çalıştırılıyor.");
+        initScript();
+    };
 
-    toggleButton.addEventListener("click", function () {
-        active = !active;
-        toggleButton.style.backgroundColor = active ? "green" : "red";
-        toggleButton.innerText = active ? "Eklenti Aktif ✅" : "Eklentiyi Aktif Et";
-        if (active) {
-            openControlPanel();
-        } else {
-            document.getElementById("customPanel")?.remove();
-        }
-    });
+    function initScript() {
+        if (document.getElementById("toggleButton")) return;
 
-    // Kontrol panelini aç
+        // Sağ üstte eklenti butonu ekleyelim
+        const toggleButton = document.createElement("button");
+        toggleButton.id = "toggleButton";
+        toggleButton.innerText = "Eklentiyi Aktif Et";
+        toggleButton.style.position = "fixed";
+        toggleButton.style.top = "10px";
+        toggleButton.style.right = "10px";
+        toggleButton.style.padding = "10px";
+        toggleButton.style.zIndex = "9999";
+        toggleButton.style.backgroundColor = "red";
+        toggleButton.style.color = "white";
+        toggleButton.style.border = "none";
+        toggleButton.style.cursor = "pointer";
+        document.body.appendChild(toggleButton);
+
+        toggleButton.addEventListener("click", function () {
+            active = !active;
+            toggleButton.style.backgroundColor = active ? "green" : "red";
+            toggleButton.innerText = active ? "Eklenti Aktif ✅" : "Eklentiyi Aktif Et";
+            if (active) {
+                openControlPanel();
+            } else {
+                document.getElementById("customPanel")?.remove();
+            }
+        });
+    }
+
     function openControlPanel() {
+        if (document.getElementById("customPanel")) return;
+
         const panel = document.createElement("div");
         panel.id = "customPanel";
         panel.style.position = "fixed";
@@ -60,16 +72,15 @@
         document.getElementById("startScraping").addEventListener("click", startScraping);
     }
 
-    // Satıcının mağazasındaki kategorileri çek
     function loadCategories() {
         const categoryContainer = document.getElementById("categoryList");
         categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
 
-        document.querySelectorAll(".s-navigation-item").forEach(item => {
+        document.querySelectorAll("a[href*='/s?i=']").forEach(item => {
             const checkbox = document.createElement("input");
             checkbox.type = "checkbox";
-            checkbox.value = item.href; // Kategori linki
-            checkbox.dataset.name = item.innerText.trim(); // Kategori adı
+            checkbox.value = item.href;
+            checkbox.dataset.name = item.innerText.trim();
             checkbox.style.marginRight = "5px";
 
             const label = document.createElement("label");
@@ -81,13 +92,12 @@
         });
     }
 
-    // Tarama başlat
     function startScraping() {
         const selectedCategories = [];
         document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
             selectedCategories.push({
                 url: checkbox.value,
-                name: checkbox.dataset.name // Kategori adını al
+                name: checkbox.dataset.name
             });
         });
 
@@ -102,7 +112,6 @@
         processCategories(selectedCategories);
     }
 
-    // Tarama durumu göstermek için kutu oluştur
     function createProgressBox() {
         const progressBox = document.createElement("div");
         progressBox.id = "progressBox";
@@ -129,12 +138,11 @@
             let totalProducts = 0;
             const fetchPromises = [];
 
-            for (let page = 1; page <= 400; page++) {
+            for (let page = 1; page <= 5; page++) {
                 const url = category.url + `&page=${page}`;
                 fetchPromises.push(fetchASINs(url, category.name));
             }
 
-            // Paralel tarama (Çok hızlı!)
             const results = await Promise.all(fetchPromises);
             results.forEach(asins => {
                 collectedASINs.push(...asins);
@@ -146,7 +154,6 @@
         generateExcel();
     }
 
-    // ASIN çekme fonksiyonu (Sayfa sayfa ilerlemeden, paralel çalışıyor!)
     async function fetchASINs(url, categoryName) {
         try {
             const response = await fetch(url, { method: "GET" });
@@ -166,7 +173,6 @@
         }
     }
 
-    // ASIN'leri CSV olarak indir
     function generateExcel() {
         let csvContent = "data:text/csv;charset=utf-8,ASIN\n";
         collectedASINs.forEach(asin => {
