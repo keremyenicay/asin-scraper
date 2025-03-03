@@ -41,23 +41,29 @@
         panel.style.top = "50px";
         panel.style.left = "50%";
         panel.style.transform = "translateX(-50%)";
-        panel.style.width = "400px";
+        panel.style.width = "600px";
         panel.style.backgroundColor = "white";
         panel.style.border = "2px solid black";
         panel.style.zIndex = "10000";
-        panel.style.padding = "10px";
-        panel.style.borderRadius = "8px";
-        panel.style.boxShadow = "0 4px 8px rgba(0,0,0,0.2)";
+        panel.style.padding = "20px";
+        panel.style.borderRadius = "12px";
+        panel.style.boxShadow = "0 4px 8px rgba(0,0,0,0.3)";
         document.body.appendChild(panel);
 
         panel.innerHTML = `
-            <h3 style="text-align:center;">ASIN Tarayıcı</h3>
-            <div style="text-align:center;">
+            <h2 style="text-align:center;">ASIN Tarayıcı</h2>
+            <div style="text-align:center; margin-bottom: 10px;">
+                <button id="selectAll" style="margin-right: 10px; padding: 8px; border-radius: 5px; background-color: gray; color: white;">Hepsini Seç</button>
+                <button id="clearSelection" style="padding: 8px; border-radius: 5px; background-color: gray; color: white;">Seçimi Temizle</button>
+            </div>
+            <div id="categoryList" style="margin-top: 10px; max-height: 300px; overflow-y: auto; border: 1px solid gray; padding: 10px; background: #f9f9f9; border-radius: 8px;"></div>
+            <div style="text-align:center; margin-top: 10px;">
                 <button id="startScraping" style="padding: 10px; font-size: 16px; background-color: blue; color: white; border: none; cursor: pointer; border-radius: 5px;">Taramayı Başlat</button>
             </div>
-            <div id="categoryList" style="margin-top: 10px; max-height: 200px; overflow-y: auto; border: 1px solid gray; padding: 10px;"></div>
         `;
         document.getElementById("startScraping").addEventListener("click", startScraping);
+        document.getElementById("selectAll").addEventListener("click", selectAllCategories);
+        document.getElementById("clearSelection").addEventListener("click", clearSelection);
         loadCategories();
     }
 
@@ -81,6 +87,14 @@
         });
     }
 
+    function selectAllCategories() {
+        document.querySelectorAll("#categoryList input").forEach(checkbox => checkbox.checked = true);
+    }
+
+    function clearSelection() {
+        document.querySelectorAll("#categoryList input").forEach(checkbox => checkbox.checked = false);
+    }
+
     function startScraping() {
         if (currentlyScraping) return;
         collectedASINs = [];
@@ -97,48 +111,49 @@
             return;
         }
 
+        createProgressBox();
         processCategories(400);
     }
 
+    function createProgressBox() {
+        document.getElementById("progressBox")?.remove();
+        const progressBox = document.createElement("div");
+        progressBox.id = "progressBox";
+        progressBox.style.position = "fixed";
+        progressBox.style.bottom = "10px";
+        progressBox.style.left = "10px";
+        progressBox.style.backgroundColor = "black";
+        progressBox.style.color = "white";
+        progressBox.style.padding = "10px";
+        progressBox.style.border = "1px solid white";
+        progressBox.style.zIndex = "9999";
+        progressBox.style.borderRadius = "5px";
+        progressBox.style.minWidth = "250px";
+        document.body.appendChild(progressBox);
+    }
+
+    function updateProgress(currentPage, totalProducts) {
+        const progressBox = document.getElementById("progressBox");
+        if (progressBox) {
+            progressBox.innerHTML = `Sayfa: ${currentPage} / 400<br>Toplam Ürün: ${totalProducts}`;
+        }
+    }
+
     async function processCategories(maxPages) {
+        let totalProducts = 0;
         while (categoryQueue.length > 0 && currentlyScraping) {
             let categoryUrl = categoryQueue.shift();
-            await scrapePages(categoryUrl, 1, maxPages);
+            for (let page = 1; page <= maxPages && currentlyScraping; page++) {
+                let pageUrl = `${categoryUrl}&page=${page}`;
+                let asins = await fetchASINs(pageUrl);
+                totalProducts += asins.length;
+                collectedASINs.push(...asins);
+                updateProgress(page, totalProducts);
+                if (asins.length === 0) break;
+            }
         }
         currentlyScraping = false;
         downloadResults();
-    }
-
-    async function scrapePages(baseUrl, startPage, maxPages) {
-        for (let page = startPage; page <= maxPages && currentlyScraping; page++) {
-            let pageUrl = `${baseUrl}&page=${page}`;
-            let asins = await fetchASINs(pageUrl);
-
-            if (asins.length === 0) break;
-            collectedASINs.push(...asins);
-        }
-    }
-
-    async function fetchASINs(url) {
-        try {
-            let response = await fetch(url, { headers: { "User-Agent": navigator.userAgent } });
-            let text = await response.text();
-            let doc = new DOMParser().parseFromString(text, "text/html");
-            let asinElements = doc.querySelectorAll("div[data-asin]");
-            return Array.from(asinElements).map(el => el.getAttribute("data-asin")).filter(asin => asin);
-        } catch (error) {
-            console.error("Hata oluştu:", error);
-            return [];
-        }
-    }
-
-    function downloadResults() {
-        let csvContent = "ASIN\n" + collectedASINs.join("\n");
-        let blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-        let link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = "asins.csv";
-        link.click();
     }
 
     createToggleButton();
