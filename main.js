@@ -131,35 +131,11 @@
             if (asins.length === 0) break;
             asins.forEach(asin => collectedASINs.add(asin));
             updateProgress(category, collectedASINs.size);
-            await new Promise(resolve => setTimeout(resolve, 500)); // Bot engelini aşmak için gecikme ekledik
         }
     }
 
     function updateProgress(category, totalProducts) {
-        const progressBox = document.getElementById("progressBox");
-        if (progressBox) {
-            progressBox.innerHTML = `Kategori: <b>${category}</b> <br> Toplam ASIN: ${totalProducts}`;
-        }
-    }
-
-    async function fetchASINs(url) {
-        try {
-            const response = await fetch(url);
-            const text = await response.text();
-            const doc = new DOMParser().parseFromString(text, "text/html");
-            return [...doc.querySelectorAll("div[data-asin]")].map(el => el.getAttribute("data-asin")).filter(Boolean);
-        } catch (error) {
-            console.error(`Hata: ${error}`);
-            return [];
-        }
-    }
-
-    function generateExcel() {
-        const blob = new Blob([Array.from(collectedASINs).join("\n")], { type: "text/csv" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = "asins.csv";
-        link.click();
+        document.getElementById("progressBox").innerHTML = `Kategori: <b>${category}</b> <br> Toplam ASIN: ${totalProducts}`;
     }
 
     createToggleButton();
