@@ -135,8 +135,6 @@
             "Eligible for Free Shipping",
             "From Our Brands",
             "Sponsored"
-            "Free Delivery by Amazon All customers get FREE Shipping on orders over $59 shipped by Amazon"
-            "Eligible for Free Delivery"
         ];
 
         // Get categories from the navigation menu
