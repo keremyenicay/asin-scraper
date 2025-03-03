@@ -69,6 +69,14 @@
                         <label for="delayBetweenRequests">Gecikmeli İstek (ms):</label>
                         <input type="number" id="delayBetweenRequests" min="0" max="5000" value="1000" style="width: 80px; margin-left: 10px;">
                     </div>
+                    <div style="margin-bottom: 20px;">
+                        <label for="maxRetries">Yeniden Deneme Sayısı:</label>
+                        <input type="number" id="maxRetries" min="0" max="10" value="3" style="width: 80px; margin-left: 10px;">
+                    </div>
+                    <div style="margin-bottom: 20px;">
+                        <label for="useAlternativePagination">Alternatif Sayfalama:</label>
+                        <input type="checkbox" id="useAlternativePagination" checked style="margin-left: 10px;">
+                    </div>
                     <button id="selectAll" style="margin-bottom: 10px; padding: 5px; width: 150px;">Hepsini Seç</button>
                     <button id="clearSelection" style="margin-bottom: 10px; padding: 5px; width: 150px;">Seçimi Temizle</button>
                     <button id="startScraping" style="padding: 10px; font-size: 16px; background-color: blue; color: white; border: none; cursor: pointer; width: 150px; border-radius: 5px;">Tarama Başlat</button>
@@ -120,14 +128,13 @@
             return;
         }
 
-        const maxPages = parseInt(document.getElementById("maxPages").value) || 400;
         currentlyScraping = true;
         
         document.getElementById("startScraping").style.display = "none";
         document.getElementById("stopScraping").style.display = "block";
         
         createProgressBox();
-        processCategories(maxPages);
+        processCategories();
     }
 
     function stopScraping() {
@@ -154,11 +161,14 @@
         progressBox.style.border = "1px solid white";
         progressBox.style.zIndex = "9999";
         progressBox.style.borderRadius = "5px";
-        progressBox.style.minWidth = "250px";
+        progressBox.style.minWidth = "300px";
+        progressBox.style.maxHeight = "300px";
+        progressBox.style.overflow = "auto";
         document.body.appendChild(progressBox);
     }
 
-    async function processCategories(maxPages) {
+    async function processCategories() {
+        const maxPages = parseInt(document.getElementById("maxPages").value) || 400;
         while (categoryQueue.length > 0 && currentlyScraping) {
             let { url, name } = categoryQueue.shift();
             await scrapeCategory(url, name, maxPages);
@@ -181,49 +191,123 @@
         let page = 1;
         let hasMorePages = true;
         const delayBetweenRequests = parseInt(document.getElementById("delayBetweenRequests").value) || 1000;
+        const maxRetries = parseInt(document.getElementById("maxRetries").value) || 3;
+        const useAlternativePagination = document.getElementById("useAlternativePagination").checked;
+        
+        let retryCount = 0;
+        let lastSuccessfulPage = 0;
+        
+        // Sayfa 400'den sonra alternatif URL formatını kullanmak için gerekli bilgileri çıkaralım
+        const urlParams = parseAmazonUrl(url);
 
         while (hasMorePages && page <= maxPages && currentlyScraping) {
-            const pageUrl = `${url}&page=${page}`;
-            updateProgress(category, totalProducts, page);
-            
-            const asins = await fetchASINsWithXHR(pageUrl);
-            
-            if (asins.length > 0) {
-                const uniqueAsins = asins.filter(asin => asin && asin.trim() !== '');
-                totalProducts += uniqueAsins.length;
-                
-                // Her ASIN'i kategori bilgisiyle birlikte saklayalım
-                uniqueAsins.forEach(asin => {
-                    collectedASINs.push({
-                        asin: asin,
-                        category: category
-                    });
-                });
-                
-                updateProgress(category, totalProducts, page);
-                page++;
-                
-                // İstek arasına gecikme ekleyelim
-                if (delayBetweenRequests > 0 && page <= maxPages) {
-                    await new Promise(resolve => setTimeout(resolve, delayBetweenRequests));
-                }
+            // Sayfa 400'den büyük ve alternatif sayfalama seçeneği aktifse farklı bir URL oluştur
+            let pageUrl;
+            if (page > 400 && useAlternativePagination) {
+                pageUrl = constructAlternativePageUrl(urlParams, page);
             } else {
-                hasMorePages = false;
+                pageUrl = `${url}&page=${page}`;
+            }
+            
+            updateProgress(category, totalProducts, page, false, false, retryCount);
+            
+            try {
+                const asins = await fetchASINsWithXHR(pageUrl);
+                
+                if (asins.length > 0) {
+                    const uniqueAsins = asins.filter(asin => asin && asin.trim() !== '');
+                    totalProducts += uniqueAsins.length;
+                    
+                    // Her ASIN'i kategori bilgisiyle birlikte saklayalım
+                    uniqueAsins.forEach(asin => {
+                        collectedASINs.push({
+                            asin: asin,
+                            category: category
+                        });
+                    });
+                    
+                    lastSuccessfulPage = page;
+                    page++;
+                    retryCount = 0; // Başarılı istek sonrası retry sayacını sıfırla
+                    
+                    updateProgress(category, totalProducts, page - 1, false, true);
+                    
+                    // İstek arasına gecikme ekleyelim
+                    if (delayBetweenRequests > 0 && page <= maxPages) {
+                        await new Promise(resolve => setTimeout(resolve, delayBetweenRequests));
+                    }
+                } else {
+                    if (page > 400 && useAlternativePagination && retryCount < maxRetries) {
+                        // Alternatif sayfalama aktifse ve maksimum retry sayısına ulaşılmadıysa tekrar dene
+                        retryCount++;
+                        updateProgress(category, totalProducts, page, false, false, retryCount);
+                        await new Promise(resolve => setTimeout(resolve, delayBetweenRequests * 2)); // Daha uzun bir bekleme süresi
+                    } else {
+                        hasMorePages = false;
+                    }
+                }
+            } catch (error) {
+                console.error(`Scraping error: ${error.message}`);
+                if (retryCount < maxRetries) {
+                    retryCount++;
+                    updateProgress(category, totalProducts, page, false, false, retryCount);
+                    await new Promise(resolve => setTimeout(resolve, delayBetweenRequests * 2));
+                } else {
+                    hasMorePages = false;
+                }
             }
         }
         
-        updateProgress(category, totalProducts, page - 1, true);
+        updateProgress(category, totalProducts, lastSuccessfulPage, true, false, 0);
     }
 
-    function updateProgress(category, totalProducts, currentPage, completed = false) {
+    function parseAmazonUrl(url) {
+        // URL'den gerekli parametreleri çıkarmak için
+        const urlObj = new URL(url);
+        const params = new URLSearchParams(urlObj.search);
+        
+        return {
+            baseUrl: urlObj.origin + urlObj.pathname,
+            merchantId: params.get('me'),
+            marketplaceID: params.get('marketplaceID'),
+            rh: params.get('rh'),
+            rnid: params.get('rnid'),
+            qid: params.get('qid'),
+            ds: params.get('ds')
+        };
+    }
+
+    function constructAlternativePageUrl(urlParams, page) {
+        // Amazon'un JSON API formatına uygun bir URL oluştur
+        const timestamp = new Date().getTime();
+        return `${urlParams.baseUrl}?i=merchant-items&me=${urlParams.merchantId}&rh=${urlParams.rh || ''}&dc&marketplaceID=${urlParams.marketplaceID}&qid=${urlParams.qid}&refresh=1&rnid=${urlParams.rnid || ''}&ref=sr_nr_n_1&ds=${urlParams.ds || ''}&page=${page}&_=${timestamp}`;
+    }
+
+    function updateProgress(category, totalProducts, currentPage, completed = false, success = true, retryCount = 0) {
         const progressBox = document.getElementById("progressBox");
         if (progressBox) {
-            progressBox.innerHTML = `
+            let statusText = "";
+            if (completed) {
+                statusText = "<span style='color: #4CAF50;'>✓ Kategori tamamlandı</span>";
+            } else if (retryCount > 0) {
+                statusText = `<span style='color: #FFA500;'>⚠️ Yeniden deneme: ${retryCount}</span>`;
+            } else if (success) {
+                statusText = "<span style='color: #4CAF50;'>✓ Sayfa başarıyla tarandı</span>";
+            }
+            
+            const progressContent = `
                 Kategori: <b>${category}</b> <br>
                 Sayfa: <b>${currentPage}</b> <br>
                 Toplam ASIN: <b>${totalProducts}</b> <br>
-                ${completed ? "<span style='color: #4CAF50;'>✓ Kategori tamamlandı</span>" : ""}
+                ${statusText}
             `;
+            
+            // Yeni içeriği ekleyerek log oluştur
+            if (!completed) {
+                progressBox.innerHTML = progressContent;
+            } else {
+                progressBox.innerHTML = progressContent + "<hr>" + progressBox.innerHTML;
+            }
         }
     }
 
@@ -242,7 +326,7 @@
                         resolve(asins);
                     } else {
                         console.error(`XHR Hata: ${xhr.status}`);
-                        resolve([]);
+                        reject(new Error(`XHR Hata: ${xhr.status}`));
                     }
                 }
             };
@@ -253,6 +337,10 @@
             xhr.setRequestHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
             xhr.setRequestHeader("Accept-Language", "tr,en-US;q=0.7,en;q=0.3");
             xhr.setRequestHeader("Cache-Control", "no-cache");
+            xhr.timeout = 15000; // 15 saniye timeout
+            xhr.ontimeout = function() {
+                reject(new Error("XHR Timeout"));
+            };
             xhr.send();
         });
     }
