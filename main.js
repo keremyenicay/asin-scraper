@@ -66,12 +66,20 @@
                 <div style="width: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 10px;">
                     <button id="selectAll" style="margin-bottom: 15px; padding: 8px 15px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Hepsini Seç</button>
                     <button id="clearSelection" style="margin-bottom: 15px; padding: 8px 15px; background-color: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">Seçimi Temizle</button>
+                    <div style="margin-bottom: 15px; text-align: center;">
+                        <label for="maxPageInput" style="display: block; margin-bottom: 5px;">Maksimum Sayfa Sayısı:</label>
+                        <input type="number" id="maxPageInput" min="1" max="400" value="400" style="padding: 5px; width: 80px; text-align: center;">
+                    </div>
                     <button id="startScraping" style="padding: 12px 25px; font-size: 16px; background-color: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">Tarama Başlat</button>
+                    <div style="margin-top: 15px; text-align: center;">
+                        <button id="scanSeller" style="padding: 10px 20px; background-color: #673AB7; color: white; border: none; border-radius: 4px; cursor: pointer;">Tüm Satıcı Ürünlerini Tara</button>
+                    </div>
                 </div>
             </div>
         `;
         loadCategories();
         document.getElementById("startScraping").addEventListener("click", startScraping);
+        document.getElementById("scanSeller").addEventListener("click", scanAllSellerProducts);
         document.getElementById("selectAll").addEventListener("click", () => {
             document.querySelectorAll("#categoryList input").forEach(cb => cb.checked = true);
         });
@@ -89,10 +97,14 @@
         let sellerID = '';
         let marketplaceID = '';
         
-        // Extract seller ID from me= parameter
+        // Extract seller ID from me= or rh= parameter
         const meMatch = url.match(/me=([A-Z0-9]+)/);
+        const rhMatch = url.match(/p_6%3A([A-Z0-9]+)/);
+        
         if (meMatch && meMatch[1]) {
             sellerID = meMatch[1];
+        } else if (rhMatch && rhMatch[1]) {
+            sellerID = rhMatch[1];
         }
         
         // Extract marketplace ID
@@ -111,29 +123,113 @@
             const categoryName = item.innerText.trim();
             const categoryHref = item.href;
             
-            // Create modified URL with rh parameter instead of me
-            const modifiedUrl = `${window.location.origin}${window.location.pathname}?rh=p_6%3A${sellerID}&marketplaceID=${marketplaceID}`;
-            
-            const checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.value = modifiedUrl;
-            checkbox.dataset.name = categoryName;
-            checkbox.style.marginRight = "5px";
-            
-            const label = document.createElement("label");
-            label.textContent = categoryName;
-            label.style.color = "#333";
-            label.style.fontSize = "14px";
-            
-            const container = document.createElement("div");
-            container.style.marginBottom = "8px";
-            container.style.display = "flex";
-            container.style.alignItems = "center";
-            
-            container.appendChild(checkbox);
-            container.appendChild(label);
-            categoryContainer.appendChild(container);
+            // Check if it's a valid category link 
+            if (categoryName && categoryHref) {
+                let categoryUrl;
+                
+                if (categoryHref.includes('n%3A')) {
+                    // For category-specific links, preserve the category ID
+                    const categoryMatch = categoryHref.match(/n%3A([0-9]+)/);
+                    if (categoryMatch && categoryMatch[1]) {
+                        const categoryId = categoryMatch[1];
+                        categoryUrl = `${window.location.origin}${window.location.pathname}?rh=n%3A${categoryId}%2Cp_6%3A${sellerID}&marketplaceID=${marketplaceID}`;
+                    } else {
+                        categoryUrl = `${window.location.origin}${window.location.pathname}?rh=p_6%3A${sellerID}&marketplaceID=${marketplaceID}`;
+                    }
+                } else {
+                    categoryUrl = `${window.location.origin}${window.location.pathname}?rh=p_6%3A${sellerID}&marketplaceID=${marketplaceID}`;
+                }
+                
+                const checkbox = document.createElement("input");
+                checkbox.type = "checkbox";
+                checkbox.value = categoryUrl;
+                checkbox.dataset.name = categoryName;
+                checkbox.style.marginRight = "5px";
+                
+                const label = document.createElement("label");
+                label.textContent = categoryName;
+                label.style.color = "#333";
+                label.style.fontSize = "14px";
+                
+                const container = document.createElement("div");
+                container.style.marginBottom = "8px";
+                container.style.display = "flex";
+                container.style.alignItems = "center";
+                
+                container.appendChild(checkbox);
+                container.appendChild(label);
+                categoryContainer.appendChild(container);
+            }
         });
+
+        // Add option for all products
+        const allProductsCheck = document.createElement("input");
+        allProductsCheck.type = "checkbox";
+        allProductsCheck.value = `${window.location.origin}${window.location.pathname}?rh=p_6%3A${sellerID}&marketplaceID=${marketplaceID}`;
+        allProductsCheck.dataset.name = "Tüm Ürünler";
+        allProductsCheck.style.marginRight = "5px";
+        
+        const allProductsLabel = document.createElement("label");
+        allProductsLabel.textContent = "Tüm Ürünler";
+        allProductsLabel.style.color = "#333";
+        allProductsLabel.style.fontSize = "14px";
+        allProductsLabel.style.fontWeight = "bold";
+        
+        const allProductsContainer = document.createElement("div");
+        allProductsContainer.style.marginBottom = "8px";
+        allProductsContainer.style.display = "flex";
+        allProductsContainer.style.alignItems = "center";
+        allProductsContainer.style.padding = "5px";
+        allProductsContainer.style.backgroundColor = "#f5f5f5";
+        allProductsContainer.style.borderRadius = "4px";
+        
+        allProductsContainer.appendChild(allProductsCheck);
+        allProductsContainer.appendChild(allProductsLabel);
+        categoryContainer.insertBefore(allProductsContainer, categoryContainer.firstChild.nextSibling);
+    }
+    
+    function scanAllSellerProducts() {
+        if (isProcessing) {
+            alert("Tarama zaten devam ediyor!");
+            return;
+        }
+
+        const url = window.location.href;
+        let sellerID = '';
+        let marketplaceID = '';
+        
+        // Extract seller ID from me= or rh= parameter
+        const meMatch = url.match(/me=([A-Z0-9]+)/);
+        const rhMatch = url.match(/p_6%3A([A-Z0-9]+)/);
+        
+        if (meMatch && meMatch[1]) {
+            sellerID = meMatch[1];
+        } else if (rhMatch && rhMatch[1]) {
+            sellerID = rhMatch[1];
+        }
+        
+        // Extract marketplace ID
+        const marketplaceMatch = url.match(/marketplaceID=([A-Z0-9]+)/);
+        if (marketplaceMatch && marketplaceMatch[1]) {
+            marketplaceID = marketplaceMatch[1];
+        }
+
+        if (!sellerID || !marketplaceID) {
+            alert("Satıcı veya marketplace ID bulunamadı!");
+            return;
+        }
+
+        collectedASINs = [];
+        categoryQueue = [];
+        totalProducts = 0;
+        
+        // Create properly formatted URL for all seller products
+        const sellerUrl = `${window.location.origin}${window.location.pathname}?rh=p_6%3A${sellerID}&marketplaceID=${marketplaceID}`;
+        categoryQueue.push({ url: sellerUrl, name: "Tüm Satıcı Ürünleri" });
+
+        createProgressBox();
+        isProcessing = true;
+        processCategories();
     }
 
     function startScraping() {
@@ -183,6 +279,7 @@
                 ASIN Tarama İlerlemesi
             </div>
             <div id="currentCategory" style="margin-bottom: 5px;">Kategori: <span style="font-weight: bold;">-</span></div>
+            <div id="currentUrl" style="margin-bottom: 5px; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">URL: <span>-</span></div>
             <div id="currentPage" style="margin-bottom: 5px;">Sayfa: <span>0</span> / <span>0</span></div>
             <div id="productCount" style="margin-bottom: 5px;">Ürün Sayısı: <span>0</span></div>
             <div id="totalProductCount" style="margin-bottom: 5px;">Toplam Ürün: <span>0</span></div>
@@ -193,6 +290,7 @@
             <div style="display: flex; justify-content: space-between; margin-top: 10px;">
                 <button id="pauseButton" style="padding: 5px 10px; background-color: #FFC107; border: none; border-radius: 4px; cursor: pointer;">Duraklat</button>
                 <button id="cancelButton" style="padding: 5px 10px; background-color: #f44336; border: none; border-radius: 4px; cursor: pointer;">İptal</button>
+                <button id="downloadButton" style="padding: 5px 10px; background-color: #2196F3; border: none; border-radius: 4px; cursor: pointer;">İndİr</button>
             </div>
         `;
         
@@ -200,6 +298,7 @@
         
         document.getElementById("pauseButton").addEventListener("click", togglePause);
         document.getElementById("cancelButton").addEventListener("click", cancelScraping);
+        document.getElementById("downloadButton").addEventListener("click", generateExcel);
     }
 
     let isPaused = false;
@@ -240,14 +339,18 @@
     async function scrapeCategory(url, category) {
         let categoryProducts = 0;
         currentPage = 1;
-        let maxPage = 400;
+        let userMaxPage = parseInt(document.getElementById("maxPageInput")?.value || 400);
+        let maxPage = Math.min(isNaN(userMaxPage) ? 400 : userMaxPage, 400);
         let hasMorePages = true;
-
+        
         // First, check how many pages are available
-        const firstPageUrl = `${url}&page=1`;
+        const firstPageUrl = ensureCorrectPageUrl(url, 1);
+        updateProgressUI(category, currentPage, maxPage, categoryProducts, totalProducts, firstPageUrl);
+        
         const firstPageInfo = await fetchPageInfo(firstPageUrl);
         if (firstPageInfo && firstPageInfo.maxPage) {
-            maxPage = Math.min(firstPageInfo.maxPage, 400);
+            maxPage = Math.min(firstPageInfo.maxPage, maxPage);
+            updateProgressUI(category, currentPage, maxPage, categoryProducts, totalProducts, firstPageUrl);
         }
 
         while (hasMorePages && currentPage <= maxPage && isProcessing) {
@@ -258,30 +361,48 @@
             
             if (!isProcessing) break;
             
-            const pageUrl = `${url}&page=${currentPage}`;
+            const pageUrl = ensureCorrectPageUrl(url, currentPage);
+            updateProgressUI(category, currentPage, maxPage, categoryProducts, totalProducts, pageUrl);
+            
             const { asins, hasNext } = await fetchASINs(pageUrl);
             
             if (asins && asins.length > 0) {
-                collectedASINs.push(...asins);
-                categoryProducts += asins.length;
-                totalProducts += asins.length;
+                // Filter out duplicates
+                const newAsins = asins.filter(asin => !collectedASINs.includes(asin));
+                collectedASINs.push(...newAsins);
+                categoryProducts += newAsins.length;
+                totalProducts += newAsins.length;
             }
             
-            updateProgressUI(category, currentPage, maxPage, categoryProducts, totalProducts);
+            updateProgressUI(category, currentPage, maxPage, categoryProducts, totalProducts, pageUrl);
             
-            hasMorePages = hasNext && asins.length > 0;
+            hasMorePages = hasNext && currentPage < maxPage;
             currentPage++;
             
             // Small delay to prevent rate limiting
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 200));
         }
     }
 
-    function updateProgressUI(category, page, maxPage, categoryProducts, totalProducts) {
+    // Helper function to ensure the URL has the correct page parameter
+    function ensureCorrectPageUrl(url, page) {
+        // First, remove any existing page parameter
+        let cleanUrl = url.replace(/&page=\d+/, '');
+        
+        // Add the page parameter
+        if (cleanUrl.includes('?')) {
+            return `${cleanUrl}&page=${page}`;
+        } else {
+            return `${cleanUrl}?page=${page}`;
+        }
+    }
+
+    function updateProgressUI(category, page, maxPage, categoryProducts, totalProducts, currentUrl = '') {
         const progressBox = document.getElementById("progressBox");
         if (!progressBox) return;
         
         document.getElementById("currentCategory").innerHTML = `Kategori: <span style="font-weight: bold;">${category || '-'}</span>`;
+        document.getElementById("currentUrl").innerHTML = `URL: <span title="${currentUrl}">${currentUrl || '-'}</span>`;
         document.getElementById("currentPage").innerHTML = `Sayfa: <span>${page}</span> / <span>${maxPage}</span>`;
         document.getElementById("productCount").innerHTML = `Ürün Sayısı: <span>${categoryProducts}</span>`;
         document.getElementById("totalProductCount").innerHTML = `Toplam Ürün: <span>${totalProducts}</span>`;
@@ -324,7 +445,7 @@
             
             const asins = [...doc.querySelectorAll("div[data-asin]")]
                 .map(el => el.getAttribute("data-asin"))
-                .filter(Boolean);
+                .filter(asin => asin && asin.trim() !== '');
             
             // Check if there's a next page
             const hasNext = !!doc.querySelector(".s-pagination-next:not(.s-pagination-disabled)");
@@ -341,11 +462,14 @@
         const now = new Date();
         const timestamp = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}`;
         
+        // Deduplicate ASINs before exporting
+        const uniqueASINs = [...new Set(collectedASINs)];
+        
         // Create a header row
         const header = "ASIN";
         
         // Combine the header and data
-        const content = [header, ...collectedASINs].join("\n");
+        const content = [header, ...uniqueASINs].join("\n");
         
         // Create and download the file
         const blob = new Blob([content], { type: "text/csv" });
@@ -355,7 +479,7 @@
         link.click();
         
         // Show completion notification
-        showNotification(`Tarama tamamlandı! ${collectedASINs.length} ürün toplandı.`);
+        showNotification(`Tarama tamamlandı! ${uniqueASINs.length} benzersiz ürün toplandı.`);
     }
     
     function showNotification(message) {
