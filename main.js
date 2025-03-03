@@ -25,8 +25,10 @@
             button.innerText = active ? "Eklenti Aktif ✅" : "Eklentiyi Aktif Et";
             if (active) {
                 openControlPanel();
+                createProgressBox();
             } else {
                 document.getElementById("customPanel")?.remove();
+                document.getElementById("progressBox")?.remove();
             }
         });
     }
@@ -50,46 +52,50 @@
 
         panel.innerHTML = `
             <h3 style="text-align:center;">ASIN Tarayıcı</h3>
-            <div id="categoryListContainer" style="display: flex; flex-wrap: wrap; gap: 10px; padding: 10px;"></div>
-            <button id="selectAll" style="margin: 10px; padding: 5px;">Hepsini Seç</button>
-            <button id="clearSelection" style="margin: 10px; padding: 5px;">Seçimi Temizle</button>
-            <button id="startScraping" style="padding: 10px; font-size: 16px; background-color: blue; color: white; border: none; cursor: pointer;">Tarama Başlat</button>
+            <div id="categoryContainer" style="display: flex; flex-direction: column; height: 350px; overflow-y: auto; border: 1px solid gray; padding: 10px; margin-bottom: 10px;"></div>
+            <div style="display: flex; justify-content: space-between;">
+                <button id="selectAll" style="padding: 5px;">Hepsini Seç</button>
+                <button id="clearSelection" style="padding: 5px;">Seçimi Temizle</button>
+                <button id="startScraping" style="padding: 10px; font-size: 16px; background-color: blue; color: white; border: none; cursor: pointer;">Tarama Başlat</button>
+            </div>
         `;
 
         loadCategories();
         document.getElementById("startScraping").addEventListener("click", startScraping);
         document.getElementById("selectAll").addEventListener("click", () => {
-            document.querySelectorAll("#categoryListContainer input").forEach(cb => cb.checked = true);
+            document.querySelectorAll("#categoryContainer input").forEach(cb => cb.checked = true);
         });
         document.getElementById("clearSelection").addEventListener("click", () => {
-            document.querySelectorAll("#categoryListContainer input").forEach(cb => cb.checked = false);
+            document.querySelectorAll("#categoryContainer input").forEach(cb => cb.checked = false);
         });
     }
 
-    function loadCategories() {
-        const categoryContainer = document.getElementById("categoryListContainer");
-        document.querySelectorAll(".s-navigation-item").forEach(item => {
-            const categoryName = item.innerText.trim();
-            const checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.value = item.href;
-            checkbox.dataset.name = categoryName;
-            const label = document.createElement("label");
-            label.textContent = categoryName;
-            label.style.marginRight = "10px";
-            const categoryDiv = document.createElement("div");
-            categoryDiv.style.display = "flex";
-            categoryDiv.style.alignItems = "center";
-            categoryDiv.appendChild(checkbox);
-            categoryDiv.appendChild(label);
-            categoryContainer.appendChild(categoryDiv);
-        });
+    function createProgressBox() {
+        document.getElementById("progressBox")?.remove();
+        const progressBox = document.createElement("div");
+        progressBox.id = "progressBox";
+        progressBox.style.position = "fixed";
+        progressBox.style.bottom = "10px";
+        progressBox.style.left = "10px";
+        progressBox.style.backgroundColor = "black";
+        progressBox.style.color = "white";
+        progressBox.style.padding = "10px";
+        progressBox.style.border = "1px solid white";
+        progressBox.style.zIndex = "9999";
+        document.body.appendChild(progressBox);
+    }
+
+    function updateProgress(category, page, total) {
+        const progressBox = document.getElementById("progressBox");
+        if (progressBox) {
+            progressBox.innerHTML = `Kategori: <b>${category}</b> <br> Sayfa: ${page} <br> Toplam ASIN: ${total}`;
+        }
     }
 
     async function startScraping() {
         collectedASINs = [];
         categoryQueue = [];
-        document.querySelectorAll("#categoryListContainer input:checked").forEach(checkbox => {
+        document.querySelectorAll("#categoryContainer input:checked").forEach(checkbox => {
             categoryQueue.push({ url: checkbox.value, name: checkbox.dataset.name });
         });
 
@@ -112,6 +118,7 @@
             const pageUrl = `${url}&page=${page}`;
             const asins = await fetchASINs(pageUrl);
             collectedASINs.push(...asins);
+            updateProgress(category, page, collectedASINs.length);
             if (asins.length === 0) hasMorePages = false;
             page++;
         }
