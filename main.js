@@ -41,7 +41,7 @@
         panel.style.top = "50px";
         panel.style.left = "50%";
         panel.style.transform = "translateX(-50%)";
-        panel.style.width = "600px";
+        panel.style.width = "700px";
         panel.style.backgroundColor = "white";
         panel.style.border = "2px solid black";
         panel.style.zIndex = "10000";
@@ -56,7 +56,7 @@
                 <button id="selectAll" style="margin-right: 10px; padding: 8px; border-radius: 5px; background-color: gray; color: white;">Hepsini Seç</button>
                 <button id="clearSelection" style="padding: 8px; border-radius: 5px; background-color: gray; color: white;">Seçimi Temizle</button>
             </div>
-            <div id="categoryList" style="margin-top: 10px; max-height: 300px; overflow-y: auto; border: 1px solid gray; padding: 10px; background: #f9f9f9; border-radius: 8px;"></div>
+            <div id="categoryList" style="margin-top: 10px; height: 350px; overflow-y: auto; border: 1px solid gray; padding: 10px; background: #f9f9f9; border-radius: 8px;"></div>
             <div style="text-align:center; margin-top: 10px;">
                 <button id="startScraping" style="padding: 10px; font-size: 16px; background-color: blue; color: white; border: none; cursor: pointer; border-radius: 5px;">Taramayı Başlat</button>
             </div>
@@ -95,26 +95,6 @@
         document.querySelectorAll("#categoryList input").forEach(checkbox => checkbox.checked = false);
     }
 
-    function startScraping() {
-        if (currentlyScraping) return;
-        collectedASINs = [];
-        categoryQueue = [];
-        currentlyScraping = true;
-
-        document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
-            categoryQueue.push(checkbox.value);
-        });
-
-        if (categoryQueue.length === 0) {
-            alert("Lütfen en az bir kategori seçin!");
-            currentlyScraping = false;
-            return;
-        }
-
-        createProgressBox();
-        processCategories(400);
-    }
-
     function createProgressBox() {
         document.getElementById("progressBox")?.remove();
         const progressBox = document.createElement("div");
@@ -139,21 +119,24 @@
         }
     }
 
-    async function processCategories(maxPages) {
-        let totalProducts = 0;
-        while (categoryQueue.length > 0 && currentlyScraping) {
-            let categoryUrl = categoryQueue.shift();
-            for (let page = 1; page <= maxPages && currentlyScraping; page++) {
-                let pageUrl = `${categoryUrl}&page=${page}`;
-                let asins = await fetchASINs(pageUrl);
-                totalProducts += asins.length;
-                collectedASINs.push(...asins);
-                updateProgress(page, totalProducts);
-                if (asins.length === 0) break;
-            }
+    function startScraping() {
+        if (currentlyScraping) return;
+        collectedASINs = [];
+        categoryQueue = [];
+        currentlyScraping = true;
+
+        document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
+            categoryQueue.push(checkbox.value);
+        });
+
+        if (categoryQueue.length === 0) {
+            alert("Lütfen en az bir kategori seçin!");
+            currentlyScraping = false;
+            return;
         }
-        currentlyScraping = false;
-        downloadResults();
+
+        createProgressBox();
+        processCategories(400);
     }
 
     createToggleButton();
