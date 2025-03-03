@@ -1,8 +1,8 @@
-(async function () {
+(function () {
     'use strict';
 
     let active = false;
-    let collectedASINs = new Set();
+    let collectedASINs = [];
     let categoryQueue = [];
 
     function createToggleButton() {
@@ -29,21 +29,6 @@
                 document.getElementById("customPanel")?.remove();
             }
         });
-    }
-
-    function createProgressBox() {
-        document.getElementById("progressBox")?.remove();
-        const progressBox = document.createElement("div");
-        progressBox.id = "progressBox";
-        progressBox.style.position = "fixed";
-        progressBox.style.bottom = "10px";
-        progressBox.style.right = "10px";
-        progressBox.style.backgroundColor = "black";
-        progressBox.style.color = "white";
-        progressBox.style.padding = "10px";
-        progressBox.style.border = "1px solid white";
-        progressBox.style.zIndex = "9999";
-        document.body.appendChild(progressBox);
     }
 
     function openControlPanel() {
@@ -84,30 +69,27 @@
         });
     }
 
-    async function fetchASINs(url) {
-        return new Promise((resolve, reject) => {
-            GM_xmlhttpRequest({
-                method: "GET",
-                url: url,
-                onload: function(response) {
-                    if (response.status === 200) {
-                        let doc = new DOMParser().parseFromString(response.responseText, "text/html");
-                        let asins = [...doc.querySelectorAll("div[data-asin]")].map(el => el.getAttribute("data-asin")).filter(Boolean);
-                        resolve(asins);
-                    } else {
-                        reject(`Hata Kodu: ${response.status}`);
-                    }
-                },
-                onerror: function(error) {
-                    reject(error);
-                }
-            });
+    function loadCategories() {
+        const categoryContainer = document.getElementById("categoryList");
+        categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
+
+        document.querySelectorAll(".s-navigation-item").forEach(item => {
+            const categoryName = item.innerText.trim();
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.value = item.href;
+            checkbox.dataset.name = categoryName;
+            checkbox.style.marginRight = "5px";
+            const label = document.createElement("label");
+            label.textContent = categoryName;
+            categoryContainer.appendChild(checkbox);
+            categoryContainer.appendChild(label);
+            categoryContainer.appendChild(document.createElement("br"));
         });
     }
 
-    async function startScraping() {
-        createProgressBox();
-        collectedASINs.clear();
+    function startScraping() {
+        collectedASINs = [];
         categoryQueue = [];
         document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
             categoryQueue.push({ url: checkbox.value, name: checkbox.dataset.name });
@@ -118,21 +100,73 @@
             return;
         }
 
-        await processCategories();
-        generateExcel();
+        createProgressBox();
+        processCategories();
+    }
+
+    function createProgressBox() {
+        const progressBox = document.createElement("div");
+        progressBox.id = "progressBox";
+        progressBox.style.position = "fixed";
+        progressBox.style.bottom = "10px";
+        progressBox.style.right = "10px";
+        progressBox.style.backgroundColor = "black";
+        progressBox.style.color = "white";
+        progressBox.style.padding = "10px";
+        progressBox.style.border = "1px solid white";
+        progressBox.style.zIndex = "9999";
+        document.body.appendChild(progressBox);
     }
 
     async function processCategories() {
-        for (let { url, name } of categoryQueue) {
-            for (let page = 1; page <= 400; page++) {
-                let pageUrl = `${url}&page=${page}&ajax=1&_=${Date.now()}`;
-                let asins = await fetchASINs(pageUrl);
-                if (asins.length === 0) break;
-                asins.forEach(asin => collectedASINs.add(asin));
-                updateProgress(name, collectedASINs.size);
-                await new Promise(resolve => setTimeout(resolve, 300));
-            }
+        while (categoryQueue.length > 0) {
+            let { url, name } = categoryQueue.shift();
+            await scrapeCategory(url, name);
         }
+        generateExcel();
+    }
+
+    async function scrapeCategory(url, category) {
+        let totalProducts = 0;
+        let page = 1;
+        let hasMorePages = true;
+
+        while (hasMorePages && page <= 400) {
+            const pageUrl = `${url}&page=${page}`;
+            const asins = await fetchASINs(pageUrl);
+            collectedASINs.push(...asins);
+            totalProducts += asins.length;
+            updateProgress(category, totalProducts);
+            if (asins.length === 0) hasMorePages = false;
+            page++;
+        }
+    }
+
+    function updateProgress(category, totalProducts) {
+        const progressBox = document.getElementById("progressBox");
+        if (progressBox) {
+            progressBox.innerHTML = `Kategori: <b>${category}</b> <br> Toplam ASIN: ${totalProducts}`;
+        }
+    }
+
+    async function fetchASINs(url) {
+        try {
+            const response = await fetch(url);
+            const text = await response.text();
+            const doc = new DOMParser().parseFromString(text, "text/html");
+            return [...doc.querySelectorAll("div[data-asin]")].map(el => el.getAttribute("data-asin")).filter(Boolean);
+        } catch (error) {
+            console.error(`Hata: ${error}`);
+            return [];
+        }
+    }
+
+    function generateExcel() {
+        const blob = new Blob([collectedASINs.join("\n")], { type: "text/csv" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "asins.csv";
+        link.click();
     }
 
     createToggleButton();
