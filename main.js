@@ -118,29 +118,40 @@
         document.body.appendChild(progressBox);
     }
 
-    async function fetchASINsAjax(url) {
-        try {
-            const response = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
-            const json = await response.json();
-            return json.results.map(item => item.asin);
-        } catch (error) {
-            console.error(`Hata: ${error}`);
-            return [];
+    async function processCategories() {
+        for (let { url, name } of categoryQueue) {
+            await scrapeCategory(url, name);
         }
     }
 
-    async function processCategories() {
-        for (let { url, name } of categoryQueue) {
-            let page = 1;
-            let hasMorePages = true;
-            while (hasMorePages && page <= 400) {
-                let ajaxUrl = `${url}&ajax=1&page=${page}`;
-                let asins = await fetchASINsAjax(ajaxUrl);
-                if (asins.length === 0) hasMorePages = false;
-                asins.forEach(asin => collectedASINs.add(asin));
-                updateProgress(name, collectedASINs.size);
-                page++;
-            }
+    async function scrapeCategory(url, category) {
+        let page = 1;
+        let hasMorePages = true;
+        while (hasMorePages && page <= 400) {
+            let ajaxUrl = `${url}&ajax=1&page=${page}`;
+            let asins = await fetchASINs(ajaxUrl);
+            asins.forEach(asin => collectedASINs.add(asin));
+            if (asins.length === 0) hasMorePages = false;
+            updateProgress(category, collectedASINs.size);
+            page++;
+        }
+    }
+
+    function updateProgress(category, totalProducts) {
+        const progressBox = document.getElementById("progressBox");
+        if (progressBox) {
+            progressBox.innerHTML = `Kategori: <b>${category}</b> <br> Toplam ASIN: ${totalProducts}`;
+        }
+    }
+
+    async function fetchASINs(url) {
+        try {
+            const response = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
+            const text = await response.text();
+            return [...text.matchAll(/"ASIN":"(.*?)"/g)].map(m => m[1]);
+        } catch (error) {
+            console.error(`Hata: ${error}`);
+            return [];
         }
     }
 
