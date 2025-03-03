@@ -120,20 +120,30 @@
 
     async function processCategories() {
         for (let { url, name } of categoryQueue) {
-            await scrapeCategory(url, name);
+            let maxPages = await getMaxPages(url);
+            await scrapeCategory(url, name, maxPages);
         }
     }
 
-    async function scrapeCategory(url, category) {
-        let page = 1;
-        let hasMorePages = true;
-        while (hasMorePages && page <= 400) {
+    async function getMaxPages(url) {
+        try {
+            const response = await fetch(url);
+            const text = await response.text();
+            const doc = new DOMParser().parseFromString(text, "text/html");
+            const lastPageLink = doc.querySelector(".s-pagination-item.s-pagination-disabled");
+            return lastPageLink ? parseInt(lastPageLink.innerText.trim()) : 1;
+        } catch (error) {
+            console.error("Sayfa sayısı alınamadı:", error);
+            return 1;
+        }
+    }
+
+    async function scrapeCategory(url, category, maxPages) {
+        for (let page = 1; page <= maxPages; page++) {
             let pageUrl = `${url}&page=${page}`;
             let asins = await fetchASINs(pageUrl);
             asins.forEach(asin => collectedASINs.add(asin));
-            if (asins.length === 0) hasMorePages = false;
             updateProgress(category, collectedASINs.size);
-            page++;
         }
     }
 
@@ -154,14 +164,6 @@
             console.error(`Hata: ${error}`);
             return [];
         }
-    }
-
-    function generateExcel() {
-        const blob = new Blob([Array.from(collectedASINs).join("\n")], { type: "text/csv" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = "asins.csv";
-        link.click();
     }
 
     createToggleButton();
