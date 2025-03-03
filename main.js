@@ -3,7 +3,7 @@
 
     let active = false;
     let collectedASINs = [];
-    let currentlyScraping = false;
+    let categoryQueue = [];
 
     function createToggleButton() {
         const button = document.createElement("button");
@@ -17,7 +17,6 @@
         button.style.color = "white";
         button.style.border = "none";
         button.style.cursor = "pointer";
-        button.style.borderRadius = "5px";
         document.body.appendChild(button);
 
         button.addEventListener("click", function () {
@@ -27,7 +26,7 @@
             if (active) {
                 openControlPanel();
             } else {
-                currentlyScraping = false;
+                document.getElementById("customPanel")?.remove();
             }
         });
     }
@@ -40,83 +39,131 @@
         panel.style.top = "50px";
         panel.style.left = "50%";
         panel.style.transform = "translateX(-50%)";
-        panel.style.width = "400px";
+        panel.style.width = "600px";
+        panel.style.height = "500px";
         panel.style.backgroundColor = "white";
         panel.style.border = "2px solid black";
         panel.style.zIndex = "10000";
         panel.style.padding = "10px";
-        panel.style.borderRadius = "8px";
-        panel.style.boxShadow = "0 4px 8px rgba(0,0,0,0.2)";
+        panel.style.overflow = "hidden";
         document.body.appendChild(panel);
 
         panel.innerHTML = `
             <h3 style="text-align:center;">ASIN Tarayıcı</h3>
-            <div style="text-align:center;">
-                <button id="startScraping" style="padding: 10px; font-size: 16px; background-color: blue; color: white; border: none; cursor: pointer; border-radius: 5px;">Taramayı Başlat</button>
+            <div style="display:flex; height: 90%;">
+                <div id="categoryList" style="width: 50%; overflow-y: auto; border-right: 1px solid gray; padding: 10px;"></div>
+                <div style="width: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                    <button id="selectAll" style="margin-bottom: 10px; padding: 5px;">Hepsini Seç</button>
+                    <button id="clearSelection" style="margin-bottom: 10px; padding: 5px;">Seçimi Temizle</button>
+                    <button id="startScraping" style="padding: 10px; font-size: 16px; background-color: blue; color: white; border: none; cursor: pointer;">Tarama Başlat</button>
+                </div>
             </div>
         `;
+        loadCategories();
         document.getElementById("startScraping").addEventListener("click", startScraping);
+        document.getElementById("selectAll").addEventListener("click", () => {
+            document.querySelectorAll("#categoryList input").forEach(cb => cb.checked = true);
+        });
+        document.getElementById("clearSelection").addEventListener("click", () => {
+            document.querySelectorAll("#categoryList input").forEach(cb => cb.checked = false);
+        });
+    }
+
+    function loadCategories() {
+        const categoryContainer = document.getElementById("categoryList");
+        categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
+
+        document.querySelectorAll(".s-navigation-item").forEach(item => {
+            const categoryName = item.innerText.trim();
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.value = item.href;
+            checkbox.dataset.name = categoryName;
+            checkbox.style.marginRight = "5px";
+            const label = document.createElement("label");
+            label.textContent = categoryName;
+            categoryContainer.appendChild(checkbox);
+            categoryContainer.appendChild(label);
+            categoryContainer.appendChild(document.createElement("br"));
+        });
     }
 
     function startScraping() {
-        if (currentlyScraping) return;
         collectedASINs = [];
-        currentlyScraping = true;
+        categoryQueue = [];
+        document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
+            categoryQueue.push({ url: checkbox.value, name: checkbox.dataset.name });
+        });
 
-        let url = window.location.href;
-        let sellerMatch = url.match(/me=([A-Z0-9]+)/);
-        let marketplaceMatch = url.match(/marketplaceID=([A-Z0-9]+)/);
+        if (categoryQueue.length === 0) {
+            alert("Lütfen en az bir kategori seçin!");
+            return;
+        }
 
-        if (sellerMatch && marketplaceMatch) {
-            let sellerId = sellerMatch[1];
-            let marketplaceId = marketplaceMatch[1];
-            let newUrl = `https://www.amazon.co.uk/s?rh=p_6%3A${sellerId}&marketplaceID=${marketplaceId}`;
-            openCategoryPage(newUrl);
+        createProgressBox();
+        processCategories();
+    }
+
+    function createProgressBox() {
+        const progressBox = document.createElement("div");
+        progressBox.id = "progressBox";
+        progressBox.style.position = "fixed";
+        progressBox.style.bottom = "10px";
+        progressBox.style.right = "10px";
+        progressBox.style.backgroundColor = "black";
+        progressBox.style.color = "white";
+        progressBox.style.padding = "10px";
+        progressBox.style.border = "1px solid white";
+        progressBox.style.zIndex = "9999";
+        document.body.appendChild(progressBox);
+    }
+
+    async function processCategories() {
+        while (categoryQueue.length > 0) {
+            let { url, name } = categoryQueue.shift();
+            await scrapeCategory(url, name);
+        }
+        generateExcel();
+    }
+
+    async function scrapeCategory(url, category) {
+        let totalProducts = 0;
+        let page = 1;
+        let hasMorePages = true;
+
+        while (hasMorePages && page <= 400) {
+            const pageUrl = `${url}&page=${page}`;
+            const asins = await fetchASINs(pageUrl);
+            collectedASINs.push(...asins);
+            totalProducts += asins.length;
+            updateProgress(category, totalProducts);
+            if (asins.length === 0) hasMorePages = false;
+            page++;
         }
     }
 
-    function openCategoryPage(url) {
-        let newTab = window.open(url, "_blank");
-        if (newTab) {
-            newTab.onload = function () {
-                newTab.postMessage({ action: "startScraping" }, "*");
-            };
+    function updateProgress(category, totalProducts) {
+        const progressBox = document.getElementById("progressBox");
+        if (progressBox) {
+            progressBox.innerHTML = `Kategori: <b>${category}</b> <br> Toplam ASIN: ${totalProducts}`;
         }
-    }
-
-    window.addEventListener("message", function (event) {
-        if (event.data.action === "startScraping") {
-            scrapePages(event.origin, 1, 400);
-        }
-    });
-
-    async function scrapePages(baseUrl, startPage, maxPages) {
-        let pageNumbers = Array.from({ length: maxPages }, (_, i) => i + 1);
-        let requests = pageNumbers.map(page => fetchASINs(`${baseUrl}&page=${page}`));
-
-        let results = await Promise.all(requests);
-        results.forEach(asins => collectedASINs.push(...asins));
-        currentlyScraping = false;
-        downloadResults();
     }
 
     async function fetchASINs(url) {
         try {
-            let response = await fetch(url, { headers: { "User-Agent": navigator.userAgent } });
-            let text = await response.text();
-            let doc = new DOMParser().parseFromString(text, "text/html");
-            let asinElements = doc.querySelectorAll("div[data-asin]");
-            return Array.from(asinElements).map(el => el.getAttribute("data-asin")).filter(asin => asin);
+            const response = await fetch(url);
+            const text = await response.text();
+            const doc = new DOMParser().parseFromString(text, "text/html");
+            return [...doc.querySelectorAll("div[data-asin]")].map(el => el.getAttribute("data-asin")).filter(Boolean);
         } catch (error) {
-            console.error("Hata oluştu:", error);
+            console.error(`Hata: ${error}`);
             return [];
         }
     }
 
-    function downloadResults() {
-        let csvContent = "ASIN\n" + collectedASINs.join("\n");
-        let blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-        let link = document.createElement("a");
+    function generateExcel() {
+        const blob = new Blob([collectedASINs.join("\n")], { type: "text/csv" });
+        const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
         link.download = "asins.csv";
         link.click();
