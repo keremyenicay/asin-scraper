@@ -73,18 +73,24 @@
         const categoryContainer = document.getElementById("categoryList");
         categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
 
-        document.querySelectorAll(".s-navigation-item").forEach(item => {
-            const categoryName = item.innerText.trim();
-            const checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.value = item.href;
-            checkbox.dataset.name = categoryName;
-            checkbox.style.marginRight = "5px";
-            const label = document.createElement("label");
-            label.textContent = categoryName;
-            categoryContainer.appendChild(checkbox);
-            categoryContainer.appendChild(label);
-            categoryContainer.appendChild(document.createElement("br"));
+        // Kategori ID'lerini çekme fonksiyonu
+        document.querySelectorAll(".s-navigation-item a").forEach(link => {
+            let url = new URL(link.href);
+            let params = new URLSearchParams(url.search);
+            let categoryID = params.get("rh")?.match(/n:(\d+)/)?.[1];
+            if (categoryID) {
+                const categoryName = link.innerText.trim();
+                const checkbox = document.createElement("input");
+                checkbox.type = "checkbox";
+                checkbox.value = categoryID;
+                checkbox.dataset.name = categoryName;
+                checkbox.style.marginRight = "5px";
+                const label = document.createElement("label");
+                label.textContent = categoryName;
+                categoryContainer.appendChild(checkbox);
+                categoryContainer.appendChild(label);
+                categoryContainer.appendChild(document.createElement("br"));
+            }
         });
     }
 
@@ -92,7 +98,7 @@
         collectedASINs = [];
         categoryQueue = [];
         document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
-            categoryQueue.push({ url: checkbox.value, name: checkbox.dataset.name });
+            categoryQueue.push({ id: checkbox.value, name: checkbox.dataset.name });
         });
 
         if (categoryQueue.length === 0) {
@@ -120,23 +126,27 @@
 
     async function processCategories() {
         while (categoryQueue.length > 0) {
-            let { url, name } = categoryQueue.shift();
-            await scrapeCategory(url, name);
+            let { id, name } = categoryQueue.shift();
+            await scrapeCategory(id, name);
         }
         generateExcel();
     }
 
-    async function scrapeCategory(url, category) {
+    async function scrapeCategory(categoryID, categoryName) {
         let totalProducts = 0;
         let page = 1;
         let hasMorePages = true;
 
         while (hasMorePages && page <= 400) {
-            const pageUrl = `${url}&page=${page}`;
+            const pageUrl = `https://www.amazon.com/s?me=SELLER_ID&rh=n:${categoryID}&page=${page}`;
+            console.log(`Tarama: ${categoryName} - Sayfa ${page}`);
+
             const asins = await fetchASINs(pageUrl);
             collectedASINs.push(...asins);
             totalProducts += asins.length;
-            updateProgress(category, totalProducts);
+
+            updateProgress(categoryName, totalProducts);
+
             if (asins.length === 0) hasMorePages = false;
             page++;
         }
