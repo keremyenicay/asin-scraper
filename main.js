@@ -128,8 +128,8 @@
         let page = 1;
         let hasMorePages = true;
         while (hasMorePages && page <= 400) {
-            let ajaxUrl = `${url}&ajax=1&page=${page}`;
-            let asins = await fetchASINs(ajaxUrl);
+            let pageUrl = `${url}&page=${page}&ajax=1`;
+            let asins = await fetchASINs(pageUrl);
             asins.forEach(asin => collectedASINs.add(asin));
             if (asins.length === 0) hasMorePages = false;
             updateProgress(category, collectedASINs.size);
@@ -146,9 +146,10 @@
 
     async function fetchASINs(url) {
         try {
-            const response = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
+            const response = await fetch(url);
             const text = await response.text();
-            return [...text.matchAll(/"ASIN":"(.*?)"/g)].map(m => m[1]);
+            const doc = new DOMParser().parseFromString(text, "text/html");
+            return [...doc.querySelectorAll("div[data-asin]")].map(el => el.getAttribute("data-asin")).filter(Boolean);
         } catch (error) {
             console.error(`Hata: ${error}`);
             return [];
