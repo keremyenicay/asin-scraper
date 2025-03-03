@@ -131,6 +131,7 @@
             if (asins.length === 0) break;
             asins.forEach(asin => collectedASINs.add(asin));
             updateProgress(category, collectedASINs.size);
+            await new Promise(resolve => setTimeout(resolve, 500)); 
         }
     }
 
