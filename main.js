@@ -67,82 +67,24 @@
         loadCategories();
     }
 
-    function loadCategories() {
-        const categoryContainer = document.getElementById("categoryList");
-        categoryContainer.innerHTML = "<b>Mevcut Kategoriler:</b><br>";
-
-        document.querySelectorAll(".s-navigation-item").forEach(item => {
-            const categoryName = item.innerText.trim();
-            const checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.value = convertToRHFormat(item.href);
-            checkbox.style.marginRight = "5px";
-
-            const label = document.createElement("label");
-            label.textContent = categoryName;
-
-            categoryContainer.appendChild(checkbox);
-            categoryContainer.appendChild(label);
-            categoryContainer.appendChild(document.createElement("br"));
-        });
-    }
-
-    function convertToRHFormat(url) {
-        let sellerMatch = url.match(/me=([A-Z0-9]+)/);
-        let marketplaceMatch = url.match(/marketplaceID=([A-Z0-9]+)/);
-        let domain = window.location.hostname;
-
-        if (sellerMatch && marketplaceMatch) {
-            let sellerId = sellerMatch[1];
-            let marketplaceId = marketplaceMatch[1];
-            return `https://${domain}/s?rh=p_6%3A${sellerId}&marketplaceID=${marketplaceId}`;
+    function processCategories(maxPages) {
+        async function scrapePages(categoryUrl, startPage, maxPages) {
+            for (let page = startPage; page <= maxPages && currentlyScraping; page++) {
+                let pageUrl = `${categoryUrl}&page=${page}`;
+                let asins = await fetchASINs(pageUrl);
+                collectedASINs.push(...asins);
+                updateProgress(page, collectedASINs.length);
+                if (asins.length === 0) break;
+            }
         }
-        return url;
-    }
 
-    function startScraping() {
-        if (currentlyScraping) return;
-        collectedASINs = [];
-        categoryQueue = [];
-        currentlyScraping = true;
-
-        document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
-            categoryQueue.push(checkbox.value);
-        });
-
-        if (categoryQueue.length === 0) {
-            alert("Lütfen en az bir kategori seçin!");
+        (async () => {
+            for (let categoryUrl of categoryQueue) {
+                await scrapePages(categoryUrl, 1, maxPages);
+            }
             currentlyScraping = false;
-            return;
-        }
-
-        createProgressBox();
-        processCategories(400);
-    }
-
-    async function processCategories(maxPages) {
-        for (let categoryUrl of categoryQueue) {
-            await scrapePages(categoryUrl, 1, maxPages);
-        }
-        currentlyScraping = false;
-        downloadResults();
-    }
-
-    function createProgressBox() {
-        document.getElementById("progressBox")?.remove();
-        const progressBox = document.createElement("div");
-        progressBox.id = "progressBox";
-        progressBox.style.position = "fixed";
-        progressBox.style.bottom = "10px";
-        progressBox.style.left = "10px";
-        progressBox.style.backgroundColor = "black";
-        progressBox.style.color = "white";
-        progressBox.style.padding = "10px";
-        progressBox.style.border = "1px solid white";
-        progressBox.style.zIndex = "9999";
-        progressBox.style.borderRadius = "5px";
-        progressBox.style.minWidth = "250px";
-        document.body.appendChild(progressBox);
+            downloadResults();
+        })();
     }
 
     createToggleButton();
