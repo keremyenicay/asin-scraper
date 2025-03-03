@@ -382,7 +382,7 @@
         let pageQueue = Array.from({length: maxPage}, (_, i) => i + 1);
         
         // Process all pages in parallel (with a reasonable limit)
-        const concurrencyLimit = 100; // Process 5 pages at once
+        const concurrencyLimit = 400; // Process 5 pages at once
         while (pageQueue.length > 0 && isProcessing) {
             // Check if paused
             if (isPaused) {
