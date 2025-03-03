@@ -50,48 +50,46 @@
 
         panel.innerHTML = `
             <h3 style="text-align:center;">ASIN Tarayıcı</h3>
-            <div style="display:flex; height: 90%;">
-                <div id="categoryList" style="width: 50%; overflow-y: auto; border-right: 1px solid gray; padding: 10px;"></div>
-                <div style="width: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                    <button id="selectAll" style="margin-bottom: 10px; padding: 5px;">Hepsini Seç</button>
-                    <button id="clearSelection" style="margin-bottom: 10px; padding: 5px;">Seçimi Temizle</button>
-                    <button id="startScraping" style="padding: 10px; font-size: 16px; background-color: blue; color: white; border: none; cursor: pointer;">Tarama Başlat</button>
-                </div>
-            </div>
+            <div id="categoryListContainer" style="display: flex; flex-wrap: wrap; gap: 10px; padding: 10px;"></div>
+            <button id="selectAll" style="margin: 10px; padding: 5px;">Hepsini Seç</button>
+            <button id="clearSelection" style="margin: 10px; padding: 5px;">Seçimi Temizle</button>
+            <button id="startScraping" style="padding: 10px; font-size: 16px; background-color: blue; color: white; border: none; cursor: pointer;">Tarama Başlat</button>
         `;
+
         loadCategories();
         document.getElementById("startScraping").addEventListener("click", startScraping);
         document.getElementById("selectAll").addEventListener("click", () => {
-            document.querySelectorAll("#categoryList input").forEach(cb => cb.checked = true);
+            document.querySelectorAll("#categoryListContainer input").forEach(cb => cb.checked = true);
         });
         document.getElementById("clearSelection").addEventListener("click", () => {
-            document.querySelectorAll("#categoryList input").forEach(cb => cb.checked = false);
+            document.querySelectorAll("#categoryListContainer input").forEach(cb => cb.checked = false);
         });
     }
 
     function loadCategories() {
-        const categoryContainer = document.getElementById("categoryList");
-        categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
-
+        const categoryContainer = document.getElementById("categoryListContainer");
         document.querySelectorAll(".s-navigation-item").forEach(item => {
             const categoryName = item.innerText.trim();
             const checkbox = document.createElement("input");
             checkbox.type = "checkbox";
             checkbox.value = item.href;
             checkbox.dataset.name = categoryName;
-            checkbox.style.marginRight = "5px";
             const label = document.createElement("label");
             label.textContent = categoryName;
-            categoryContainer.appendChild(checkbox);
-            categoryContainer.appendChild(label);
-            categoryContainer.appendChild(document.createElement("br"));
+            label.style.marginRight = "10px";
+            const categoryDiv = document.createElement("div");
+            categoryDiv.style.display = "flex";
+            categoryDiv.style.alignItems = "center";
+            categoryDiv.appendChild(checkbox);
+            categoryDiv.appendChild(label);
+            categoryContainer.appendChild(categoryDiv);
         });
     }
 
-    function startScraping() {
+    async function startScraping() {
         collectedASINs = [];
         categoryQueue = [];
-        document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
+        document.querySelectorAll("#categoryListContainer input:checked").forEach(checkbox => {
             categoryQueue.push({ url: checkbox.value, name: checkbox.dataset.name });
         });
 
@@ -100,52 +98,22 @@
             return;
         }
 
-        createProgressBox();
-        processCategories();
-    }
-
-    function createProgressBox() {
-        const progressBox = document.createElement("div");
-        progressBox.id = "progressBox";
-        progressBox.style.position = "fixed";
-        progressBox.style.bottom = "10px";
-        progressBox.style.right = "10px";
-        progressBox.style.backgroundColor = "black";
-        progressBox.style.color = "white";
-        progressBox.style.padding = "10px";
-        progressBox.style.border = "1px solid white";
-        progressBox.style.zIndex = "9999";
-        document.body.appendChild(progressBox);
-    }
-
-    async function processCategories() {
         while (categoryQueue.length > 0) {
             let { url, name } = categoryQueue.shift();
             await scrapeCategory(url, name);
         }
-        generateExcel();
+        downloadExcel();
     }
 
     async function scrapeCategory(url, category) {
-        let totalProducts = 0;
         let page = 1;
         let hasMorePages = true;
-
-        while (hasMorePages && page <= 400) {
+        while (hasMorePages && page <= 10) {
             const pageUrl = `${url}&page=${page}`;
             const asins = await fetchASINs(pageUrl);
             collectedASINs.push(...asins);
-            totalProducts += asins.length;
-            updateProgress(category, totalProducts);
             if (asins.length === 0) hasMorePages = false;
             page++;
-        }
-    }
-
-    function updateProgress(category, totalProducts) {
-        const progressBox = document.getElementById("progressBox");
-        if (progressBox) {
-            progressBox.innerHTML = `Kategori: <b>${category}</b> <br> Toplam ASIN: ${totalProducts}`;
         }
     }
 
@@ -161,7 +129,7 @@
         }
     }
 
-    function generateExcel() {
+    function downloadExcel() {
         const blob = new Blob([collectedASINs.join("\n")], { type: "text/csv" });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
