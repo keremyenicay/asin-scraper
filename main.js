@@ -4,6 +4,7 @@
     let active = false;
     let collectedASINs = [];
     let categoryQueue = [];
+    let currentlyScraping = false;
 
     function createToggleButton() {
         const button = document.createElement("button");
@@ -17,6 +18,7 @@
         button.style.color = "white";
         button.style.border = "none";
         button.style.cursor = "pointer";
+        button.style.borderRadius = "5px";
         document.body.appendChild(button);
 
         button.addEventListener("click", function () {
@@ -27,6 +29,10 @@
                 openControlPanel();
             } else {
                 document.getElementById("customPanel")?.remove();
+                if (currentlyScraping) {
+                    currentlyScraping = false;
+                    document.getElementById("progressBox")?.remove();
+                }
             }
         });
     }
@@ -46,6 +52,8 @@
         panel.style.zIndex = "10000";
         panel.style.padding = "10px";
         panel.style.overflow = "hidden";
+        panel.style.borderRadius = "8px";
+        panel.style.boxShadow = "0 4px 8px rgba(0,0,0,0.2)";
         document.body.appendChild(panel);
 
         panel.innerHTML = `
@@ -53,14 +61,24 @@
             <div style="display:flex; height: 90%;">
                 <div id="categoryList" style="width: 50%; overflow-y: auto; border-right: 1px solid gray; padding: 10px;"></div>
                 <div style="width: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                    <button id="selectAll" style="margin-bottom: 10px; padding: 5px;">Hepsini Seç</button>
-                    <button id="clearSelection" style="margin-bottom: 10px; padding: 5px;">Seçimi Temizle</button>
-                    <button id="startScraping" style="padding: 10px; font-size: 16px; background-color: blue; color: white; border: none; cursor: pointer;">Tarama Başlat</button>
+                    <div style="margin-bottom: 20px;">
+                        <label for="maxPages">Maksimum Sayfa Sayısı:</label>
+                        <input type="number" id="maxPages" min="1" max="1000" value="400" style="width: 80px; margin-left: 10px;">
+                    </div>
+                    <div style="margin-bottom: 20px;">
+                        <label for="delayBetweenRequests">Gecikmeli İstek (ms):</label>
+                        <input type="number" id="delayBetweenRequests" min="0" max="5000" value="1000" style="width: 80px; margin-left: 10px;">
+                    </div>
+                    <button id="selectAll" style="margin-bottom: 10px; padding: 5px; width: 150px;">Hepsini Seç</button>
+                    <button id="clearSelection" style="margin-bottom: 10px; padding: 5px; width: 150px;">Seçimi Temizle</button>
+                    <button id="startScraping" style="padding: 10px; font-size: 16px; background-color: blue; color: white; border: none; cursor: pointer; width: 150px; border-radius: 5px;">Tarama Başlat</button>
+                    <button id="stopScraping" style="padding: 10px; font-size: 16px; background-color: red; color: white; border: none; cursor: pointer; margin-top: 10px; width: 150px; border-radius: 5px; display: none;">Taramayı Durdur</button>
                 </div>
             </div>
         `;
         loadCategories();
         document.getElementById("startScraping").addEventListener("click", startScraping);
+        document.getElementById("stopScraping").addEventListener("click", stopScraping);
         document.getElementById("selectAll").addEventListener("click", () => {
             document.querySelectorAll("#categoryList input").forEach(cb => cb.checked = true);
         });
@@ -89,6 +107,8 @@
     }
 
     function startScraping() {
+        if (currentlyScraping) return;
+        
         collectedASINs = [];
         categoryQueue = [];
         document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
@@ -100,8 +120,26 @@
             return;
         }
 
+        const maxPages = parseInt(document.getElementById("maxPages").value) || 400;
+        currentlyScraping = true;
+        
+        document.getElementById("startScraping").style.display = "none";
+        document.getElementById("stopScraping").style.display = "block";
+        
         createProgressBox();
-        processCategories();
+        processCategories(maxPages);
+    }
+
+    function stopScraping() {
+        currentlyScraping = false;
+        categoryQueue = [];
+        document.getElementById("startScraping").style.display = "block";
+        document.getElementById("stopScraping").style.display = "none";
+        
+        const progressBox = document.getElementById("progressBox");
+        if (progressBox) {
+            progressBox.innerHTML += "<br><b>Tarama kullanıcı tarafından durduruldu!</b>";
+        }
     }
 
     function createProgressBox() {
@@ -115,57 +153,123 @@
         progressBox.style.padding = "10px";
         progressBox.style.border = "1px solid white";
         progressBox.style.zIndex = "9999";
+        progressBox.style.borderRadius = "5px";
+        progressBox.style.minWidth = "250px";
         document.body.appendChild(progressBox);
     }
 
-    async function processCategories() {
-        while (categoryQueue.length > 0) {
+    async function processCategories(maxPages) {
+        while (categoryQueue.length > 0 && currentlyScraping) {
             let { url, name } = categoryQueue.shift();
-            await scrapeCategory(url, name);
+            await scrapeCategory(url, name, maxPages);
         }
-        generateExcel();
+        
+        if (currentlyScraping) {
+            generateExcel();
+            const progressBox = document.getElementById("progressBox");
+            if (progressBox) {
+                progressBox.innerHTML += "<br><b>Tarama tamamlandı!</b>";
+            }
+            currentlyScraping = false;
+            document.getElementById("startScraping").style.display = "block";
+            document.getElementById("stopScraping").style.display = "none";
+        }
     }
 
-    async function scrapeCategory(url, category) {
+    async function scrapeCategory(url, category, maxPages) {
         let totalProducts = 0;
         let page = 1;
         let hasMorePages = true;
+        const delayBetweenRequests = parseInt(document.getElementById("delayBetweenRequests").value) || 1000;
 
-        while (hasMorePages && page <= 400) {
+        while (hasMorePages && page <= maxPages && currentlyScraping) {
             const pageUrl = `${url}&page=${page}`;
-            const asins = await fetchASINs(pageUrl);
-            collectedASINs.push(...asins);
-            totalProducts += asins.length;
-            updateProgress(category, totalProducts);
-            if (asins.length === 0) hasMorePages = false;
-            page++;
+            updateProgress(category, totalProducts, page);
+            
+            const asins = await fetchASINsWithXHR(pageUrl);
+            
+            if (asins.length > 0) {
+                const uniqueAsins = asins.filter(asin => asin && asin.trim() !== '');
+                totalProducts += uniqueAsins.length;
+                
+                // Her ASIN'i kategori bilgisiyle birlikte saklayalım
+                uniqueAsins.forEach(asin => {
+                    collectedASINs.push({
+                        asin: asin,
+                        category: category
+                    });
+                });
+                
+                updateProgress(category, totalProducts, page);
+                page++;
+                
+                // İstek arasına gecikme ekleyelim
+                if (delayBetweenRequests > 0 && page <= maxPages) {
+                    await new Promise(resolve => setTimeout(resolve, delayBetweenRequests));
+                }
+            } else {
+                hasMorePages = false;
+            }
         }
+        
+        updateProgress(category, totalProducts, page - 1, true);
     }
 
-    function updateProgress(category, totalProducts) {
+    function updateProgress(category, totalProducts, currentPage, completed = false) {
         const progressBox = document.getElementById("progressBox");
         if (progressBox) {
-            progressBox.innerHTML = `Kategori: <b>${category}</b> <br> Toplam ASIN: ${totalProducts}`;
+            progressBox.innerHTML = `
+                Kategori: <b>${category}</b> <br>
+                Sayfa: <b>${currentPage}</b> <br>
+                Toplam ASIN: <b>${totalProducts}</b> <br>
+                ${completed ? "<span style='color: #4CAF50;'>✓ Kategori tamamlandı</span>" : ""}
+            `;
         }
     }
 
-    async function fetchASINs(url) {
-        try {
-            const response = await fetch(url);
-            const text = await response.text();
-            const doc = new DOMParser().parseFromString(text, "text/html");
-            return [...doc.querySelectorAll("div[data-asin]")].map(el => el.getAttribute("data-asin")).filter(Boolean);
-        } catch (error) {
-            console.error(`Hata: ${error}`);
-            return [];
-        }
+    function fetchASINsWithXHR(url) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(xhr.responseText, "text/html");
+                        const asinElements = doc.querySelectorAll("div[data-asin]");
+                        const asins = Array.from(asinElements)
+                            .map(el => el.getAttribute("data-asin"))
+                            .filter(Boolean);
+                        resolve(asins);
+                    } else {
+                        console.error(`XHR Hata: ${xhr.status}`);
+                        resolve([]);
+                    }
+                }
+            };
+            
+            xhr.open("GET", url, true);
+            // Amazon'un bot olduğumuzu anlamasını zorlaştırmak için
+            xhr.setRequestHeader("User-Agent", navigator.userAgent);
+            xhr.setRequestHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
+            xhr.setRequestHeader("Accept-Language", "tr,en-US;q=0.7,en;q=0.3");
+            xhr.setRequestHeader("Cache-Control", "no-cache");
+            xhr.send();
+        });
     }
 
     function generateExcel() {
-        const blob = new Blob([collectedASINs.join("\n")], { type: "text/csv" });
+        // CSV header
+        let csvContent = "ASIN,Kategori\n";
+        
+        // Her ASIN ve kategori bilgisini CSV'ye ekleyelim
+        collectedASINs.forEach(item => {
+            csvContent += `${item.asin},"${item.category}"\n`;
+        });
+        
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8" });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
-        link.download = "asins.csv";
+        link.download = `amazon_asins_${new Date().toISOString().slice(0, 10)}.csv`;
         link.click();
     }
 
