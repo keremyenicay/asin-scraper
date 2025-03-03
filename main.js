@@ -104,18 +104,19 @@
         generateExcel();
     }
 
-    function createProgressBox() {
-        const progressBox = document.createElement("div");
-        progressBox.id = "progressBox";
-        progressBox.style.position = "fixed";
-        progressBox.style.bottom = "10px";
-        progressBox.style.right = "10px";
-        progressBox.style.backgroundColor = "black";
-        progressBox.style.color = "white";
-        progressBox.style.padding = "10px";
-        progressBox.style.border = "1px solid white";
-        progressBox.style.zIndex = "9999";
-        document.body.appendChild(progressBox);
+    async function fetchASINs(url) {
+        return new Promise((resolve) => {
+            let xhr = new XMLHttpRequest();
+            xhr.open("GET", url, true);
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    let doc = new DOMParser().parseFromString(xhr.responseText, "text/html");
+                    let asins = [...doc.querySelectorAll("div[data-asin]")].map(el => el.getAttribute("data-asin")).filter(Boolean);
+                    resolve(asins);
+                }
+            };
+            xhr.send();
+        });
     }
 
     async function processCategories() {
@@ -131,7 +132,7 @@
             if (asins.length === 0) break;
             asins.forEach(asin => collectedASINs.add(asin));
             updateProgress(category, collectedASINs.size);
-            await new Promise(resolve => setTimeout(resolve, 500)); 
+            await new Promise(resolve => setTimeout(resolve, 300));
         }
     }
 
