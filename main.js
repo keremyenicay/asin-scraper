@@ -84,26 +84,29 @@
         });
     }
 
-    function loadCategories() {
-        const categoryContainer = document.getElementById("categoryList");
-        categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
-        document.querySelectorAll(".s-navigation-item").forEach(item => {
-            const categoryName = item.innerText.trim();
-            const checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.value = item.href;
-            checkbox.dataset.name = categoryName;
-            checkbox.style.marginRight = "5px";
-            const label = document.createElement("label");
-            label.textContent = categoryName;
-            categoryContainer.appendChild(checkbox);
-            categoryContainer.appendChild(label);
-            categoryContainer.appendChild(document.createElement("br"));
+    async function fetchASINs(url) {
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: url,
+                onload: function(response) {
+                    if (response.status === 200) {
+                        let doc = new DOMParser().parseFromString(response.responseText, "text/html");
+                        let asins = [...doc.querySelectorAll("div[data-asin]")].map(el => el.getAttribute("data-asin")).filter(Boolean);
+                        resolve(asins);
+                    } else {
+                        reject(`Hata Kodu: ${response.status}`);
+                    }
+                },
+                onerror: function(error) {
+                    reject(error);
+                }
+            });
         });
     }
 
     async function startScraping() {
-        createProgressBox(); // İlk olarak burada çağrılacak
+        createProgressBox();
         collectedASINs.clear();
         categoryQueue = [];
         document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
@@ -121,23 +124,15 @@
 
     async function processCategories() {
         for (let { url, name } of categoryQueue) {
-            await scrapeCategory(url, name);
+            for (let page = 1; page <= 400; page++) {
+                let pageUrl = `${url}&page=${page}&ajax=1&_=${Date.now()}`;
+                let asins = await fetchASINs(pageUrl);
+                if (asins.length === 0) break;
+                asins.forEach(asin => collectedASINs.add(asin));
+                updateProgress(name, collectedASINs.size);
+                await new Promise(resolve => setTimeout(resolve, 300));
+            }
         }
-    }
-
-    async function scrapeCategory(url, category) {
-        for (let page = 1; page <= 400; page++) {
-            let pageUrl = `${url}&page=${page}&ajax=1&_=${Date.now()}`;
-            let asins = await fetchASINs(pageUrl);
-            if (asins.length === 0) break;
-            asins.forEach(asin => collectedASINs.add(asin));
-            updateProgress(category, collectedASINs.size);
-            await new Promise(resolve => setTimeout(resolve, 300));
-        }
-    }
-
-    function updateProgress(category, totalProducts) {
-        document.getElementById("progressBox").innerHTML = `Kategori: <b>${category}</b> <br> Toplam ASIN: ${totalProducts}`;
     }
 
     createToggleButton();
