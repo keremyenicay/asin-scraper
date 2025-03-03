@@ -6,6 +6,8 @@
     let categoryQueue = [];
     let currentlyScraping = false;
     let logMessages = [];
+    let currentDelay = 1000;
+    let pageCheckStatus = {};
 
     function createToggleButton() {
         const button = document.createElement("button");
@@ -68,27 +70,22 @@
                     </div>
                     <div style="margin-bottom: 15px; width: 100%;">
                         <label for="initialDelay">Başlangıç Gecikmesi (ms):</label>
-                        <input type="number" id="initialDelay" min="500" max="10000" value="1000" style="width: 80px; margin-left: 10px;">
+                        <input type="number" id="initialDelay" min="1000" max="10000" value="2000" style="width: 80px; margin-left: 10px;">
                     </div>
                     <div style="margin-bottom: 15px; width: 100%;">
                         <label for="progressiveDelay">İlerleyici Gecikme Artışı (%):</label>
-                        <input type="number" id="progressiveDelay" min="0" max="100" value="10" style="width: 80px; margin-left: 10px;">
+                        <input type="number" id="progressiveDelay" min="0" max="100" value="15" style="width: 80px; margin-left: 10px;">
                     </div>
                     <div style="margin-bottom: 15px; width: 100%;">
                         <label for="maxRetries">Yeniden Deneme Sayısı:</label>
                         <input type="number" id="maxRetries" min="0" max="10" value="3" style="width: 80px; margin-left: 10px;">
                     </div>
                     <div style="margin-bottom: 15px; width: 100%;">
-                        <label for="paginationStrategy">Sayfalama Stratejisi:</label>
-                        <select id="paginationStrategy" style="margin-left: 10px; width: 200px;">
-                            <option value="standard">Standart (&page=N)</option>
-                            <option value="ajaxified" selected>AJAX Format (JSON)</option>
-                            <option value="hybrid">Hibrit (Otomatik Değiştir)</option>
+                        <label for="pageCheckMode">Sayfa Kontrol Modu:</label>
+                        <select id="pageCheckMode" style="margin-left: 10px; width: 200px;">
+                            <option value="sequential">Sıralı Kontrol</option>
+                            <option value="binary" selected>İkili Arama</option>
                         </select>
-                    </div>
-                    <div style="margin-bottom: 15px; width: 100%;">
-                        <label for="useRandomUserAgent">Rastgele User-Agent:</label>
-                        <input type="checkbox" id="useRandomUserAgent" checked style="margin-left: 10px;">
                     </div>
                     <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 15px;">
                         <button id="selectAll" style="padding: 5px; width: 120px;">Hepsini Seç</button>
@@ -135,6 +132,8 @@
         collectedASINs = [];
         categoryQueue = [];
         logMessages = [];
+        pageCheckStatus = {};
+        
         document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
             categoryQueue.push({ url: checkbox.value, name: checkbox.dataset.name });
         });
@@ -227,26 +226,24 @@
         }
     }
 
-    function updateStatus(category, totalProducts, currentPage) {
+    function updateStatus(category, pageInfo, totalProducts) {
         const statusArea = document.getElementById("statusArea");
         
         if (statusArea) {
             statusArea.innerHTML = `
                 <div><b>Kategori:</b> ${category}</div>
-                <div><b>Sayfa:</b> ${currentPage}</div>
+                <div><b>Sayfa Kontrol:</b> ${pageInfo}</div>
                 <div><b>Toplanan ASIN:</b> ${totalProducts}</div>
-                <div><b>Toplam Kategoriler:</b> ${categoryQueue.length + 1} / ${document.querySelectorAll("#categoryList input:checked").length}</div>
+                <div><b>Kalan Kategoriler:</b> ${categoryQueue.length} / ${document.querySelectorAll("#categoryList input:checked").length}</div>
             `;
         }
     }
 
     async function processCategories() {
-        const maxPages = parseInt(document.getElementById("maxPages").value) || 400;
-        
         while (categoryQueue.length > 0 && currentlyScraping) {
             const category = categoryQueue[0];
             addToLog(`"${category.name}" kategorisi taranmaya başlıyor...`, "info");
-            await scrapeCategory(category.url, category.name, maxPages);
+            await findValidPages(category.url, category.name);
             categoryQueue.shift();
         }
         
@@ -259,317 +256,274 @@
         }
     }
 
-    async function scrapeCategory(url, category, maxPages) {
-        let totalProducts = 0;
-        let currentPage = 1;
-        let retryCount = 0;
-        let consecutiveEmptyPages = 0;
-        const maxRetries = parseInt(document.getElementById("maxRetries").value) || 3;
-        const initialDelay = parseInt(document.getElementById("initialDelay").value) || 1000;
-        const progressiveDelayPercent = parseInt(document.getElementById("progressiveDelay").value) || 10;
-        const paginationStrategy = document.getElementById("paginationStrategy").value || "hybrid";
-        const useRandomUserAgent = document.getElementById("useRandomUserAgent").checked;
+    async function findValidPages(categoryUrl, categoryName) {
+        const maxPages = parseInt(document.getElementById("maxPages").value) || 400;
+        const pageCheckMode = document.getElementById("pageCheckMode").value;
+        let validPages = [];
         
-        // URL parçalama işlemi
-        const urlInfo = parseAmazonUrl(url);
-        
-        // Her sayfa için alternatif talep yapısı kullanacağız
-        while (currentPage <= maxPages && currentlyScraping) {
-            updateStatus(category, totalProducts, currentPage);
+        if (pageCheckMode === "binary") {
+            // Binary search to efficiently find the last valid page
+            let left = 1;
+            let right = maxPages;
             
-            // Gecikme süresini hesapla (sayfa ilerledikçe artan)
-            const currentDelay = calculateDelay(initialDelay, progressiveDelayPercent, currentPage);
+            addToLog(`İkili arama ile geçerli sayfa sayısı tespit ediliyor (1-${maxPages})...`, "info");
             
-            // URL oluştur
-            let pageUrl;
-            if (paginationStrategy === "standard" || (paginationStrategy === "hybrid" && currentPage <= 20)) {
-                pageUrl = buildStandardUrl(urlInfo, currentPage);
-                addToLog(`Sayfa ${currentPage}: Standart URL formatı kullanılıyor`, "info");
-            } else {
-                pageUrl = buildAjaxUrl(urlInfo, currentPage);
-                addToLog(`Sayfa ${currentPage}: AJAX URL formatı kullanılıyor`, "info");
+            while (left <= right && currentlyScraping) {
+                let mid = Math.floor((left + right) / 2);
+                updateStatus(categoryName, `Sayfa ${mid} kontrol ediliyor (Aralık: ${left}-${right})`, collectedASINs.length);
+                
+                const pageExists = await checkPageExists(categoryUrl, mid);
+                
+                if (pageExists) {
+                    left = mid + 1;
+                    addToLog(`Sayfa ${mid} mevcut. Üst sınırı kontrol ediyorum...`, "success");
+                } else {
+                    right = mid - 1;
+                    addToLog(`Sayfa ${mid} mevcut değil. Alt sınırı kontrol ediyorum...`, "warning");
+                }
+                
+                // Apply delay between checks to avoid being blocked
+                await sleep(currentDelay);
             }
             
-            try {
-                // User-Agent değiştirme seçeneği aktifse rastgele bir User-Agent kullan
-                const userAgent = useRandomUserAgent ? getRandomUserAgent() : navigator.userAgent;
+            // right is now the last valid page
+            const lastValidPage = right;
+            addToLog(`Son geçerli sayfa: ${lastValidPage}`, "success");
+            
+            // Now scrape all valid pages from 1 to lastValidPage
+            for (let page = 1; page <= lastValidPage && currentlyScraping; page++) {
+                validPages.push(page);
+            }
+        } else {
+            // Sequential check - check each page one by one
+            addToLog(`Sıralı kontrol ile geçerli sayfalar tespit ediliyor...`, "info");
+            
+            for (let page = 1; page <= maxPages && currentlyScraping; page++) {
+                updateStatus(categoryName, `Sayfa ${page}/${maxPages} kontrol ediliyor`, collectedASINs.length);
                 
-                // XHR talebi gönder
-                const asins = await fetchASINsWithXHR(pageUrl, userAgent, currentDelay);
+                const pageExists = await checkPageExists(categoryUrl, page);
+                
+                if (pageExists) {
+                    validPages.push(page);
+                    addToLog(`Sayfa ${page} mevcut.`, "success");
+                } else {
+                    addToLog(`Sayfa ${page} mevcut değil. Kontrol sonlandırılıyor.`, "warning");
+                    break;
+                }
+                
+                // Apply delay between checks to avoid being blocked
+                await sleep(currentDelay);
+            }
+        }
+        
+        // Now we have all valid pages, let's extract ASINs
+        if (validPages.length > 0) {
+            addToLog(`Toplam ${validPages.length} geçerli sayfa bulundu. ASIN tarama başlıyor...`, "success");
+            await scrapeValidPages(categoryUrl, categoryName, validPages);
+        } else {
+            addToLog(`"${categoryName}" kategorisinde geçerli sayfa bulunamadı.`, "error");
+        }
+    }
+
+    async function checkPageExists(url, pageNum) {
+        try {
+            // Create the page URL
+            const pageUrl = createPageUrl(url, pageNum);
+            
+            // Use fetch with HEAD method to efficiently check if page exists
+            const frameId = `check_frame_${Date.now()}`;
+            const result = await new Promise((resolve) => {
+                // Create an invisible iframe to load the page
+                const iframe = document.createElement('iframe');
+                iframe.id = frameId;
+                iframe.style.display = 'none';
+                document.body.appendChild(iframe);
+                
+                // Set a timeout for the check
+                const timeout = setTimeout(() => {
+                    document.body.removeChild(iframe);
+                    resolve(false);
+                }, 15000);
+                
+                // Listen for iframe load event
+                iframe.onload = () => {
+                    clearTimeout(timeout);
+                    try {
+                        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                        
+                        // Check if we got blocked by a CAPTCHA
+                        if (iframeDoc.body.textContent.includes("captcha") || 
+                            iframeDoc.body.textContent.includes("Captcha") ||
+                            iframeDoc.body.textContent.includes("robot") || 
+                            iframeDoc.body.textContent.includes("Robot")) {
+                            addToLog("CAPTCHA algılandı! Daha uzun gecikme ekleniyor...", "error");
+                            currentDelay = currentDelay * 2; // Increase delay when CAPTCHA is detected
+                            resolve(false);
+                            return;
+                        }
+                        
+                        // Check for the presence of products
+                        const hasProducts = iframeDoc.querySelectorAll("[data-asin]").length > 0 || 
+                                          iframeDoc.querySelectorAll(".s-result-item").length > 0;
+                                          
+                        document.body.removeChild(iframe);
+                        resolve(hasProducts);
+                    } catch (e) {
+                        document.body.removeChild(iframe);
+                        resolve(false);
+                    }
+                };
+                
+                // Set iframe source to load the page
+                iframe.src = pageUrl;
+            });
+            
+            // Store result in cache to avoid unnecessary checks
+            pageCheckStatus[pageNum] = result;
+            return result;
+        } catch (e) {
+            console.error(`Error checking page ${pageNum}:`, e);
+            return false;
+        }
+    }
+
+    async function scrapeValidPages(categoryUrl, categoryName, validPages) {
+        const initialDelay = parseInt(document.getElementById("initialDelay").value) || 2000;
+        const progressiveDelayPercent = parseInt(document.getElementById("progressiveDelay").value) || 15;
+        let totalProducts = 0;
+        
+        for (let i = 0; i < validPages.length && currentlyScraping; i++) {
+            const page = validPages[i];
+            
+            // Update status
+            updateStatus(categoryName, `Sayfa ${page}/${validPages.length} taranıyor`, totalProducts);
+            
+            // Calculate progressive delay
+            const pageDelay = calculateDelay(initialDelay, progressiveDelayPercent, i+1);
+            
+            try {
+                // Navigate to the page
+                await navigateToPage(categoryUrl, page);
+                
+                // Extract ASINs
+                const asins = await extractASINsFromCurrentPage();
                 
                 if (asins.length > 0) {
-                    // Başarılı sonuç aldık
-                    consecutiveEmptyPages = 0;
-                    retryCount = 0;
-                    
-                    const uniqueAsins = asins.filter(asin => asin && asin.trim() !== '');
-                    const newAsinsCount = uniqueAsins.length;
-                    totalProducts += newAsinsCount;
-                    
-                    // ASIN'leri kategorileriyle birlikte kaydet
-                    uniqueAsins.forEach(asin => {
+                    // Store ASINs with their category
+                    asins.forEach(asin => {
                         collectedASINs.push({
                             asin: asin,
-                            category: category
+                            category: categoryName
                         });
                     });
                     
-                    addToLog(`Sayfa ${currentPage}: ${newAsinsCount} ASIN bulundu (Toplam: ${totalProducts})`, "success");
-                    
-                    // Bir sonraki sayfaya geç
-                    currentPage++;
-                    
-                    // İşlemi Amazon'un algılamaması için gerekli beklemeyi yap
-                    await sleep(currentDelay);
+                    totalProducts += asins.length;
+                    addToLog(`Sayfa ${page}: ${asins.length} ASIN bulundu (Toplam: ${totalProducts})`, "success");
                 } else {
-                    // Boş sayfa veya hata durumu
-                    consecutiveEmptyPages++;
-                    
-                    if (consecutiveEmptyPages >= 3) {
-                        // Üst üste 3 boş sayfa aldıysak, muhtemelen sayfaların sonuna geldik
-                        addToLog(`${consecutiveEmptyPages} boş sayfa alındı - kategori taraması tamamlanıyor`, "warning");
-                        break;
-                    }
-                    
-                    if (retryCount < maxRetries) {
-                        // Tekrar deneme
-                        retryCount++;
-                        const retryDelay = currentDelay * 2; // Tekrar denemelerde daha uzun bekle
-                        addToLog(`Sayfa ${currentPage}: Boş yanıt - ${retryCount}/${maxRetries} tekrar deneniyor... (${retryDelay}ms bekliyor)`, "warning");
-                        
-                        // Pagination stratejisini değiştirmeyi dene
-                        if (paginationStrategy === "hybrid") {
-                            addToLog("Alternatif sayfalama stratejisi kullanılacak", "info");
-                        }
-                        
-                        await sleep(retryDelay);
-                    } else {
-                        // Maksimum deneme sayısına ulaşıldı
-                        addToLog(`Sayfa ${currentPage}: Maksimum yeniden deneme sayısına ulaşıldı`, "error");
-                        
-                        // Bir sonraki sayfayı dene, belki bu sayfa özelinde bir sorun vardır
-                        currentPage++;
-                        retryCount = 0;
-                        await sleep(currentDelay);
-                    }
+                    addToLog(`Sayfa ${page}: ASIN bulunamadı.`, "warning");
                 }
-            } catch (error) {
-                console.error(`Scraping error for page ${currentPage}:`, error);
-                addToLog(`Sayfa ${currentPage}: Hata - ${error.message}`, "error");
                 
-                if (retryCount < maxRetries) {
-                    // Tekrar deneme
-                    retryCount++;
-                    const retryDelay = currentDelay * 2;
-                    addToLog(`Sayfa ${currentPage}: ${retryCount}/${maxRetries} tekrar deneniyor... (${retryDelay}ms bekliyor)`, "warning");
-                    await sleep(retryDelay);
-                } else {
-                    // Maksimum deneme sayısına ulaşıldı
-                    addToLog(`Sayfa ${currentPage}: Maksimum yeniden deneme sayısına ulaşıldı, sonraki sayfaya geçiliyor`, "error");
-                    currentPage++;
-                    retryCount = 0;
-                    await sleep(currentDelay);
-                }
+                // Wait before processing next page
+                await sleep(pageDelay);
+            } catch (error) {
+                addToLog(`Sayfa ${page}: Hata - ${error.message}`, "error");
+                await sleep(pageDelay * 2);
             }
         }
         
-        addToLog(`"${category}" kategorisi tamamlandı. Toplam ${totalProducts} ASIN toplandı.`, "success");
+        addToLog(`"${categoryName}" kategorisi taraması tamamlandı. Toplam ${totalProducts} ASIN toplandı.`, "success");
         return totalProducts;
     }
 
-    function parseAmazonUrl(url) {
-        try {
-            const urlObj = new URL(url);
-            const params = new URLSearchParams(urlObj.search);
-            
-            return {
-                baseUrl: urlObj.origin + urlObj.pathname,
-                host: urlObj.hostname,
-                merchantId: params.get('me') || '',
-                marketplaceID: params.get('marketplaceID') || '',
-                rh: params.get('rh') || '',
-                i: params.get('i') || 'merchant-items',
-                dc: params.get('dc') !== null,
-                qid: params.get('qid') || getRandomQid(),
-                rnid: params.get('rnid') || '',
-                ref: params.get('ref') || 'sr_nr_n_1',
-                ds: params.get('ds') || ''
-            };
-        } catch (e) {
-            console.error("URL parsing error:", e);
-            // Fallback to minimal parsing
-            return {
-                baseUrl: url.split('?')[0],
-                host: new URL(url).hostname,
-                qid: getRandomQid()
-            };
-        }
-    }
-
-    function buildStandardUrl(urlInfo, page) {
-        // Standard Amazon pagination format
-        const params = new URLSearchParams();
-        if (urlInfo.i) params.append('i', urlInfo.i);
-        if (urlInfo.merchantId) params.append('me', urlInfo.merchantId);
-        if (urlInfo.rh) params.append('rh', urlInfo.rh);
-        if (urlInfo.dc) params.append('dc', '');
-        if (urlInfo.marketplaceID) params.append('marketplaceID', urlInfo.marketplaceID);
-        if (urlInfo.qid) params.append('qid', urlInfo.qid);
-        params.append('refresh', '1');
-        if (urlInfo.rnid) params.append('rnid', urlInfo.rnid);
-        if (urlInfo.ref) params.append('ref', urlInfo.ref);
-        if (urlInfo.ds) params.append('ds', urlInfo.ds);
-        params.append('page', page.toString());
+    function createPageUrl(baseUrl, page) {
+        // Parse the URL
+        const url = new URL(baseUrl);
+        const params = new URLSearchParams(url.search);
         
-        return `${urlInfo.baseUrl}?${params.toString()}`;
-    }
-
-    function buildAjaxUrl(urlInfo, page) {
-        // AJAX format with timestamp to prevent caching
-        const timestamp = new Date().getTime();
-        const params = new URLSearchParams();
-        if (urlInfo.i) params.append('i', urlInfo.i);
-        if (urlInfo.merchantId) params.append('me', urlInfo.merchantId);
-        if (urlInfo.rh) params.append('rh', urlInfo.rh);
-        if (urlInfo.dc) params.append('dc', '');
-        if (urlInfo.marketplaceID) params.append('marketplaceID', urlInfo.marketplaceID);
-        params.append('qid', urlInfo.qid || getRandomQid());
-        params.append('refresh', '1');
-        if (urlInfo.rnid) params.append('rnid', urlInfo.rnid);
-        params.append('ref', 'sr_nr_n_1');
-        if (urlInfo.ds) params.append('ds', urlInfo.ds);
-        params.append('page', page.toString());
-        params.append('_', timestamp.toString());
+        // Add or update the page parameter
+        params.set('page', page.toString());
         
-        return `${urlInfo.baseUrl}?${params.toString()}`;
+        // Update URL search parameters
+        url.search = params.toString();
+        
+        return url.toString();
     }
 
-    function getRandomQid() {
-        // Generate a random QID similar to Amazon's format
-        return Math.floor(Math.random() * 1000000000).toString();
+    async function navigateToPage(baseUrl, page) {
+        return new Promise((resolve, reject) => {
+            try {
+                const pageUrl = createPageUrl(baseUrl, page);
+                
+                // Create a temporary anchor element to navigate
+                const link = document.createElement('a');
+                link.href = pageUrl;
+                link.target = "_self"; // Navigate in the same window
+                
+                // Simulate click to navigate
+                link.click();
+                
+                // Wait for page to load
+                setTimeout(() => {
+                    resolve(true);
+                }, 3000); // Giving time for the page to load
+            } catch (e) {
+                reject(e);
+            }
+        });
+    }
+
+    async function extractASINsFromCurrentPage() {
+        // This function extracts ASINs from the current page without using XHR
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                try {
+                    // Try different selectors for ASIN extraction
+                    let asinElements = document.querySelectorAll("[data-asin]");
+                    
+                    if (asinElements.length === 0) {
+                        asinElements = document.querySelectorAll(".s-result-item");
+                    }
+                    
+                    if (asinElements.length === 0) {
+                        asinElements = document.querySelectorAll("[data-component-id]");
+                    }
+                    
+                    const asins = [];
+                    asinElements.forEach(el => {
+                        let asin = el.getAttribute("data-asin");
+                        if (!asin) {
+                            asin = el.getAttribute("data-component-id");
+                        }
+                        
+                        // Extract ASIN from HREF if not found by other methods
+                        if (!asin && el.querySelector("a")) {
+                            const href = el.querySelector("a").getAttribute("href");
+                            if (href) {
+                                const asinMatch = href.match(/\/dp\/([A-Z0-9]{10})/);
+                                if (asinMatch && asinMatch[1]) {
+                                    asin = asinMatch[1];
+                                }
+                            }
+                        }
+                        
+                        if (asin && /^[A-Z0-9]{10}$/.test(asin)) {
+                            asins.push(asin);
+                        }
+                    });
+                    
+                    resolve(asins);
+                } catch (e) {
+                    console.error("Error extracting ASINs:", e);
+                    resolve([]);
+                }
+            }, 1000); // Small delay to ensure page is fully loaded
+        });
     }
 
     function calculateDelay(initialDelay, progressivePercent, pageNumber) {
         // Calculate progressive delay that increases with page number
         const multiplier = 1 + (Math.min(pageNumber, 100) - 1) * (progressivePercent / 100);
         return Math.round(initialDelay * multiplier);
-    }
-
-    function getRandomUserAgent() {
-        // Common user agent strings
-        const userAgents = [
-            // Chrome on Windows
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36",
-            // Firefox on Windows
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:90.0) Gecko/20100101 Firefox/90.0",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0",
-            // Edge on Windows
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59",
-            // Safari on Mac
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15",
-            // Chrome on Mac
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36",
-            // Firefox on Mac
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:89.0) Gecko/20100101 Firefox/89.0",
-            // Mobile
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
-            "Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36"
-        ];
-        
-        return userAgents[Math.floor(Math.random() * userAgents.length)];
-    }
-
-    function fetchASINsWithXHR(url, userAgent, timeout = 15000) {
-        return new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4) {
-                    if (xhr.status === 200) {
-                        try {
-                            const parser = new DOMParser();
-                            const doc = parser.parseFromString(xhr.responseText, "text/html");
-                            
-                            // Try several selectors for ASIN extraction
-                            let asinElements = doc.querySelectorAll("[data-asin]");
-                            
-                            // If no ASINs found with the primary selector, try alternative selectors
-                            if (asinElements.length === 0) {
-                                asinElements = doc.querySelectorAll(".s-result-item");
-                            }
-                            
-                            if (asinElements.length === 0) {
-                                asinElements = doc.querySelectorAll("[data-component-id]");
-                            }
-                            
-                            const asins = [];
-                            asinElements.forEach(el => {
-                                let asin = el.getAttribute("data-asin");
-                                if (!asin) {
-                                    asin = el.getAttribute("data-component-id");
-                                }
-                                
-                                // Extract ASIN from HREF if not found by other methods
-                                if (!asin && el.querySelector("a")) {
-                                    const href = el.querySelector("a").getAttribute("href");
-                                    if (href) {
-                                        const asinMatch = href.match(/\/dp\/([A-Z0-9]{10})/);
-                                        if (asinMatch && asinMatch[1]) {
-                                            asin = asinMatch[1];
-                                        }
-                                    }
-                                }
-                                
-                                if (asin && /^[A-Z0-9]{10}$/.test(asin)) {
-                                    asins.push(asin);
-                                }
-                            });
-                            
-                            // Log raw HTML response for debugging when no ASINs found
-                            if (asins.length === 0) {
-                                console.log("No ASINs found in response. Response length:", xhr.responseText.length);
-                                // Check if we got redirected to a captcha page
-                                if (xhr.responseText.includes("captcha") || xhr.responseText.includes("Captcha") || 
-                                    xhr.responseText.includes("robot") || xhr.responseText.includes("Robot")) {
-                                    reject(new Error("Captcha detected - scraping was blocked"));
-                                    return;
-                                }
-                            }
-                            
-                            resolve(asins);
-                        } catch (e) {
-                            console.error("Error parsing response:", e);
-                            reject(e);
-                        }
-                    } else {
-                        reject(new Error(`HTTP error: ${xhr.status}`));
-                    }
-                }
-            };
-            
-            xhr.open("GET", url, true);
-            xhr.timeout = timeout;
-            
-            // Set headers to mimic a browser
-            xhr.setRequestHeader("User-Agent", userAgent);
-            xhr.setRequestHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
-            xhr.setRequestHeader("Accept-Language", "tr,en-US;q=0.7,en;q=0.3");
-            xhr.setRequestHeader("Referer", new URL(url).origin + "/");
-            xhr.setRequestHeader("DNT", "1");
-            xhr.setRequestHeader("Connection", "keep-alive");
-            xhr.setRequestHeader("Upgrade-Insecure-Requests", "1");
-            xhr.setRequestHeader("Cache-Control", "max-age=0");
-            
-            xhr.ontimeout = function() {
-                reject(new Error("Request timed out"));
-            };
-            
-            xhr.onerror = function() {
-                reject(new Error("Network error occurred"));
-            };
-            
-            xhr.send();
-        });
     }
 
     function sleep(ms) {
