@@ -75,7 +75,7 @@
             const categoryName = item.innerText.trim();
             const checkbox = document.createElement("input");
             checkbox.type = "checkbox";
-            checkbox.value = item.href;
+            checkbox.value = convertToRHFormat(item.href);
             checkbox.style.marginRight = "5px";
 
             const label = document.createElement("label");
@@ -87,36 +87,17 @@
         });
     }
 
-    function selectAllCategories() {
-        document.querySelectorAll("#categoryList input").forEach(checkbox => checkbox.checked = true);
-    }
+    function convertToRHFormat(url) {
+        let sellerMatch = url.match(/me=([A-Z0-9]+)/);
+        let marketplaceMatch = url.match(/marketplaceID=([A-Z0-9]+)/);
+        let domain = window.location.hostname;
 
-    function clearSelection() {
-        document.querySelectorAll("#categoryList input").forEach(checkbox => checkbox.checked = false);
-    }
-
-    function createProgressBox() {
-        document.getElementById("progressBox")?.remove();
-        const progressBox = document.createElement("div");
-        progressBox.id = "progressBox";
-        progressBox.style.position = "fixed";
-        progressBox.style.bottom = "10px";
-        progressBox.style.left = "10px";
-        progressBox.style.backgroundColor = "black";
-        progressBox.style.color = "white";
-        progressBox.style.padding = "10px";
-        progressBox.style.border = "1px solid white";
-        progressBox.style.zIndex = "9999";
-        progressBox.style.borderRadius = "5px";
-        progressBox.style.minWidth = "250px";
-        document.body.appendChild(progressBox);
-    }
-
-    function updateProgress(currentPage, totalProducts) {
-        const progressBox = document.getElementById("progressBox");
-        if (progressBox) {
-            progressBox.innerHTML = `Sayfa: ${currentPage} / 400<br>Toplam Ürün: ${totalProducts}`;
+        if (sellerMatch && marketplaceMatch) {
+            let sellerId = sellerMatch[1];
+            let marketplaceId = marketplaceMatch[1];
+            return `https://${domain}/s?rh=p_6%3A${sellerId}&marketplaceID=${marketplaceId}`;
         }
+        return url;
     }
 
     function startScraping() {
@@ -137,6 +118,31 @@
 
         createProgressBox();
         processCategories(400);
+    }
+
+    async function processCategories(maxPages) {
+        for (let categoryUrl of categoryQueue) {
+            await scrapePages(categoryUrl, 1, maxPages);
+        }
+        currentlyScraping = false;
+        downloadResults();
+    }
+
+    function createProgressBox() {
+        document.getElementById("progressBox")?.remove();
+        const progressBox = document.createElement("div");
+        progressBox.id = "progressBox";
+        progressBox.style.position = "fixed";
+        progressBox.style.bottom = "10px";
+        progressBox.style.left = "10px";
+        progressBox.style.backgroundColor = "black";
+        progressBox.style.color = "white";
+        progressBox.style.padding = "10px";
+        progressBox.style.border = "1px solid white";
+        progressBox.style.zIndex = "9999";
+        progressBox.style.borderRadius = "5px";
+        progressBox.style.minWidth = "250px";
+        document.body.appendChild(progressBox);
     }
 
     createToggleButton();
