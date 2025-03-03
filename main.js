@@ -125,15 +125,12 @@
     }
 
     async function scrapeCategory(url, category) {
-        let page = 1;
-        let hasMorePages = true;
-        while (hasMorePages && page <= 400) {
-            let pageUrl = `${url}&page=${page}&ajax=1`;
+        for (let page = 1; page <= 400; page++) {
+            let pageUrl = `${url}&page=${page}&ajax=1&_=${Date.now()}`;
             let asins = await fetchASINs(pageUrl);
+            if (asins.length === 0) break;
             asins.forEach(asin => collectedASINs.add(asin));
-            if (asins.length === 0) hasMorePages = false;
             updateProgress(category, collectedASINs.size);
-            page++;
         }
     }
 
