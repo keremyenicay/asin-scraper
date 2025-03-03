@@ -3,7 +3,6 @@
 
     let active = false;
     let collectedASINs = [];
-    let categoryQueue = [];
     let currentlyScraping = false;
 
     function createToggleButton() {
@@ -26,41 +25,11 @@
             button.style.backgroundColor = active ? "green" : "red";
             button.innerText = active ? "Eklenti Aktif ✅" : "Eklentiyi Aktif Et";
             if (active) {
-                openControlPanel();
+                startScraping();
             } else {
-                document.getElementById("customPanel")?.remove();
-                if (currentlyScraping) {
-                    currentlyScraping = false;
-                    document.getElementById("progressBox")?.remove();
-                }
+                currentlyScraping = false;
             }
         });
-    }
-
-    function openControlPanel() {
-        document.getElementById("customPanel")?.remove();
-        const panel = document.createElement("div");
-        panel.id = "customPanel";
-        panel.style.position = "fixed";
-        panel.style.top = "50px";
-        panel.style.left = "50%";
-        panel.style.transform = "translateX(-50%)";
-        panel.style.width = "400px";
-        panel.style.backgroundColor = "white";
-        panel.style.border = "2px solid black";
-        panel.style.zIndex = "10000";
-        panel.style.padding = "10px";
-        panel.style.borderRadius = "8px";
-        panel.style.boxShadow = "0 4px 8px rgba(0,0,0,0.2)";
-        document.body.appendChild(panel);
-
-        panel.innerHTML = `
-            <h3 style="text-align:center;">ASIN Tarayıcı</h3>
-            <div style="text-align:center;">
-                <button id="startScraping" style="padding: 10px; font-size: 16px; background-color: blue; color: white; border: none; cursor: pointer; border-radius: 5px;">Taramayı Başlat</button>
-            </div>
-        `;
-        document.getElementById("startScraping").addEventListener("click", startScraping);
     }
 
     function startScraping() {
@@ -68,33 +37,31 @@
         collectedASINs = [];
         currentlyScraping = true;
 
-        let currentPage = 1;
-        let maxPages = 400;
-        let sellerUrl = window.location.href.includes("me=")
-            ? window.location.href.replace("me=", "rh=p_6%3A")
-            : window.location.href;
-        
-        scrapePages(sellerUrl, currentPage, maxPages);
+        let url = window.location.href;
+        let sellerMatch = url.match(/me=([A-Z0-9]+)/);
+        let marketplaceMatch = url.match(/marketplaceID=([A-Z0-9]+)/);
+
+        if (sellerMatch && marketplaceMatch) {
+            let sellerId = sellerMatch[1];
+            let marketplaceId = marketplaceMatch[1];
+            let newUrl = `https://www.amazon.co.uk/s?rh=p_6%3A${sellerId}&marketplaceID=${marketplaceId}`;
+            scrapePages(newUrl, 1, 400);
+        }
     }
 
-    async function scrapePages(baseUrl, page, maxPages) {
-        while (page <= maxPages && currentlyScraping) {
-            let pageUrl = `${baseUrl}&page=${page}`;
-            let asins = await fetchASINs(pageUrl);
+    async function scrapePages(baseUrl, startPage, maxPages) {
+        let pageNumbers = Array.from({ length: maxPages }, (_, i) => i + 1);
+        let requests = pageNumbers.map(page => fetchASINs(`${baseUrl}&page=${page}`));
 
-            if (asins.length === 0) break;
-            collectedASINs.push(...asins);
-            page++;
-        }
+        let results = await Promise.all(requests);
+        results.forEach(asins => collectedASINs.push(...asins));
         currentlyScraping = false;
         downloadResults();
     }
 
     async function fetchASINs(url) {
         try {
-            let response = await fetch(url, {
-                headers: { "User-Agent": navigator.userAgent }
-            });
+            let response = await fetch(url, { headers: { "User-Agent": navigator.userAgent } });
             let text = await response.text();
             let doc = new DOMParser().parseFromString(text, "text/html");
             let asinElements = doc.querySelectorAll("div[data-asin]");
