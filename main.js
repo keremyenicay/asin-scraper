@@ -31,6 +31,21 @@
         });
     }
 
+    function createProgressBox() {
+        document.getElementById("progressBox")?.remove();
+        const progressBox = document.createElement("div");
+        progressBox.id = "progressBox";
+        progressBox.style.position = "fixed";
+        progressBox.style.bottom = "10px";
+        progressBox.style.right = "10px";
+        progressBox.style.backgroundColor = "black";
+        progressBox.style.color = "white";
+        progressBox.style.padding = "10px";
+        progressBox.style.border = "1px solid white";
+        progressBox.style.zIndex = "9999";
+        document.body.appendChild(progressBox);
+    }
+
     function openControlPanel() {
         document.getElementById("customPanel")?.remove();
         const panel = document.createElement("div");
@@ -69,21 +84,6 @@
         });
     }
 
-    function createProgressBox() {
-        document.getElementById("progressBox")?.remove();
-        const progressBox = document.createElement("div");
-        progressBox.id = "progressBox";
-        progressBox.style.position = "fixed";
-        progressBox.style.bottom = "10px";
-        progressBox.style.right = "10px";
-        progressBox.style.backgroundColor = "black";
-        progressBox.style.color = "white";
-        progressBox.style.padding = "10px";
-        progressBox.style.border = "1px solid white";
-        progressBox.style.zIndex = "9999";
-        document.body.appendChild(progressBox);
-    }
-
     function loadCategories() {
         const categoryContainer = document.getElementById("categoryList");
         categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
@@ -103,6 +103,7 @@
     }
 
     async function startScraping() {
+        createProgressBox(); // İlk olarak burada çağrılacak
         collectedASINs.clear();
         categoryQueue = [];
         document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
@@ -114,7 +115,6 @@
             return;
         }
 
-        createProgressBox();
         await processCategories();
         generateExcel();
     }
