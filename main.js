@@ -1,8 +1,8 @@
-(function () {
+(async function () {
     'use strict';
 
     let active = false;
-    let collectedASINs = [];
+    let collectedASINs = new Set();
     let categoryQueue = [];
 
     function createToggleButton() {
@@ -72,33 +72,26 @@
     function loadCategories() {
         const categoryContainer = document.getElementById("categoryList");
         categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
-
-        // Kategori ID'lerini çekme fonksiyonu
-        document.querySelectorAll(".s-navigation-item a").forEach(link => {
-            let url = new URL(link.href);
-            let params = new URLSearchParams(url.search);
-            let categoryID = params.get("rh")?.match(/n:(\d+)/)?.[1];
-            if (categoryID) {
-                const categoryName = link.innerText.trim();
-                const checkbox = document.createElement("input");
-                checkbox.type = "checkbox";
-                checkbox.value = categoryID;
-                checkbox.dataset.name = categoryName;
-                checkbox.style.marginRight = "5px";
-                const label = document.createElement("label");
-                label.textContent = categoryName;
-                categoryContainer.appendChild(checkbox);
-                categoryContainer.appendChild(label);
-                categoryContainer.appendChild(document.createElement("br"));
-            }
+        document.querySelectorAll(".s-navigation-item").forEach(item => {
+            const categoryName = item.innerText.trim();
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.value = item.href;
+            checkbox.dataset.name = categoryName;
+            checkbox.style.marginRight = "5px";
+            const label = document.createElement("label");
+            label.textContent = categoryName;
+            categoryContainer.appendChild(checkbox);
+            categoryContainer.appendChild(label);
+            categoryContainer.appendChild(document.createElement("br"));
         });
     }
 
-    function startScraping() {
-        collectedASINs = [];
+    async function startScraping() {
+        collectedASINs.clear();
         categoryQueue = [];
         document.querySelectorAll("#categoryList input:checked").forEach(checkbox => {
-            categoryQueue.push({ id: checkbox.value, name: checkbox.dataset.name });
+            categoryQueue.push({ url: checkbox.value, name: checkbox.dataset.name });
         });
 
         if (categoryQueue.length === 0) {
@@ -107,7 +100,8 @@
         }
 
         createProgressBox();
-        processCategories();
+        await processCategories();
+        generateExcel();
     }
 
     function createProgressBox() {
@@ -125,29 +119,20 @@
     }
 
     async function processCategories() {
-        while (categoryQueue.length > 0) {
-            let { id, name } = categoryQueue.shift();
-            await scrapeCategory(id, name);
+        for (let { url, name } of categoryQueue) {
+            await scrapeCategory(url, name);
         }
-        generateExcel();
     }
 
-    async function scrapeCategory(categoryID, categoryName) {
-        let totalProducts = 0;
+    async function scrapeCategory(url, category) {
         let page = 1;
         let hasMorePages = true;
-
         while (hasMorePages && page <= 400) {
-            const pageUrl = `https://www.amazon.com/s?me=SELLER_ID&rh=n:${categoryID}&page=${page}`;
-            console.log(`Tarama: ${categoryName} - Sayfa ${page}`);
-
-            const asins = await fetchASINs(pageUrl);
-            collectedASINs.push(...asins);
-            totalProducts += asins.length;
-
-            updateProgress(categoryName, totalProducts);
-
+            let pageUrl = `${url}&page=${page}`;
+            let asins = await fetchASINs(pageUrl);
+            asins.forEach(asin => collectedASINs.add(asin));
             if (asins.length === 0) hasMorePages = false;
+            updateProgress(category, collectedASINs.size);
             page++;
         }
     }
@@ -172,7 +157,7 @@
     }
 
     function generateExcel() {
-        const blob = new Blob([collectedASINs.join("\n")], { type: "text/csv" });
+        const blob = new Blob([Array.from(collectedASINs).join("\n")], { type: "text/csv" });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
         link.download = "asins.csv";
