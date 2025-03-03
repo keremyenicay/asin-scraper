@@ -99,12 +99,52 @@
     function loadCategories() {
         const categoryContainer = document.getElementById("categoryList");
         categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
+        
+        // Mevcut URL'den satıcı ID'sini al
+        const currentUrl = window.location.href;
+        const sellerIdMatch = currentUrl.match(/me=([A-Z0-9]+)/);
+        const marketplaceIdMatch = currentUrl.match(/marketplaceID=([A-Z0-9]+)/);
+        
+        const sellerId = sellerIdMatch ? sellerIdMatch[1] : getSellerIdFromPage();
+        const marketplaceId = marketplaceIdMatch ? marketplaceIdMatch[1] : getMarketplaceIdFromPage();
+        
+        if (sellerId) {
+            // Ana kategori - Tüm ürünler
+            const allProductsCheckbox = document.createElement("input");
+            allProductsCheckbox.type = "checkbox";
+            allProductsCheckbox.value = `https://www.amazon.co.uk/s?rh=p_6%3A${sellerId}&marketplaceID=${marketplaceId}`;
+            allProductsCheckbox.dataset.name = "Tüm Ürünler";
+            allProductsCheckbox.style.marginRight = "5px";
+            allProductsCheckbox.checked = true; // Varsayılan olarak seçili
+            
+            const allProductsLabel = document.createElement("label");
+            allProductsLabel.textContent = "Tüm Ürünler";
+            allProductsLabel.style.fontWeight = "bold";
+            
+            categoryContainer.appendChild(allProductsCheckbox);
+            categoryContainer.appendChild(allProductsLabel);
+            categoryContainer.appendChild(document.createElement("br"));
+            categoryContainer.appendChild(document.createElement("hr"));
+        }
 
+        // Sayfadaki kategori linklerini al
         document.querySelectorAll(".s-navigation-item").forEach(item => {
             const categoryName = item.innerText.trim();
             const checkbox = document.createElement("input");
             checkbox.type = "checkbox";
-            checkbox.value = item.href;
+            
+            // URL'yi özel formata dönüştür
+            let categoryUrl = item.href;
+            if (sellerId) {
+                // Kategori parametrelerini al
+                const categoryParams = getCategoryParamsFromUrl(categoryUrl);
+                // Yeni URL formatını oluştur
+                if (categoryParams) {
+                    categoryUrl = `https://www.amazon.co.uk/s?rh=${categoryParams},p_6%3A${sellerId}&marketplaceID=${marketplaceId}`;
+                }
+            }
+            
+            checkbox.value = categoryUrl;
             checkbox.dataset.name = categoryName;
             checkbox.style.marginRight = "5px";
             const label = document.createElement("label");
@@ -113,6 +153,44 @@
             categoryContainer.appendChild(label);
             categoryContainer.appendChild(document.createElement("br"));
         });
+    }
+
+    function getSellerIdFromPage() {
+        // Sayfadaki meta bilgilerden veya diğer elementlerden satıcı ID'sini almaya çalış
+        const metaTags = document.querySelectorAll('meta');
+        for (let i = 0; i < metaTags.length; i++) {
+            const content = metaTags[i].getAttribute('content') || '';
+            if (content.includes('merchant=')) {
+                const match = content.match(/merchant=([A-Z0-9]+)/);
+                if (match) return match[1];
+            }
+        }
+        
+        // DOM'da satıcı ID'sini bulmak için farklı yöntemler dene
+        const sellerElements = document.querySelectorAll('a[href*="/s?me="]');
+        if (sellerElements.length > 0) {
+            const href = sellerElements[0].getAttribute('href');
+            const match = href.match(/me=([A-Z0-9]+)/);
+            if (match) return match[1];
+        }
+        
+        // URL'den direkt almayı dene
+        const currentUrl = window.location.href;
+        const sellerMatch = currentUrl.match(/me=([A-Z0-9]+)/);
+        return sellerMatch ? sellerMatch[1] : null;
+    }
+
+    function getMarketplaceIdFromPage() {
+        // Sayfadan marketplace ID'sini al
+        const currentUrl = window.location.href;
+        const match = currentUrl.match(/marketplaceID=([A-Z0-9]+)/);
+        return match ? match[1] : 'A1F83G8C2ARO7P'; // Varsayılan olarak UK marketplace ID'si
+    }
+
+    function getCategoryParamsFromUrl(url) {
+        // URL'den kategori parametrelerini çıkar
+        const match = url.match(/\/s\?.*?(?:rh=|k=|i=)([^&]+)/);
+        return match ? match[1] : null;
     }
 
     function startScraping() {
@@ -220,17 +298,15 @@
         let progressLog = [];
 
         while (hasMorePages && page <= maxPages && currentlyScraping) {
-            // URL yapısını düzelt
+            // URL'yi düzenle - page parametresini ekle veya güncelle
             let pageUrl = url;
-            if (url.includes('page=')) {
-                // Eğer URL'de zaten page parametresi varsa, değerini güncelle
-                pageUrl = url.replace(/page=\d+/, `page=${page}`);
-            } else if (url.includes('?')) {
-                // URL'de soru işareti varsa ancak page parametresi yoksa, ekle
-                pageUrl = `${url}&page=${page}`;
+            
+            if (pageUrl.includes('page=')) {
+                pageUrl = pageUrl.replace(/page=\d+/, `page=${page}`);
+            } else if (pageUrl.includes('?')) {
+                pageUrl = `${pageUrl}&page=${page}`;
             } else {
-                // URL'de hiç parametre yoksa, page parametresini ekle
-                pageUrl = `${url}?page=${page}`;
+                pageUrl = `${pageUrl}?page=${page}`;
             }
             
             // İlerleme durumunu güncelle
@@ -241,7 +317,7 @@
                 const asins = await fetchASINsWithXHR(pageUrl, useRotatingHeaders);
                 
                 if (asins && asins.length > 0) {
-                    const uniqueAsins = asins.filter(asin => asin && asin.trim() !== '');
+                    const uniqueAsins = asins.filter(asin => asin && asin.trim() !== '' && asin.length >= 10);
                     totalProducts += uniqueAsins.length;
                     
                     // Her ASIN'i kategori bilgisiyle birlikte saklayalım
@@ -257,15 +333,22 @@
                     });
                     
                     // İlerleme güncellemesi
-                    progressLog.push(`Sayfa ${page}: ${uniqueAsins.length} ASIN bulundu`);
+                    progressLog.push(`Sayfa ${page}: ${uniqueAsins.length} ASIN bulundu (Yeni: ${uniqueAsins.length})`);
                     updateProgress(category, totalProducts, page, false, progressLog);
                     
                     // Başarılı istek olduğunda hata sayacını sıfırla
                     consecutiveErrors = 0;
                     page++;
                     
+                    // Sayfada 0 ürün varsa veya çok az ürün kaldıysa sonraki kategoriye geç
+                    if (uniqueAsins.length === 0 || (page > 5 && uniqueAsins.length < 3)) {
+                        progressLog.push(`Sayfa ${page-1}: Yeterli ürün bulunamadı, tarama sonlandırılıyor.`);
+                        updateProgress(category, totalProducts, page-1, false, progressLog);
+                        hasMorePages = false;
+                    }
+                    
                     // Gecikme ekleme
-                    if (page <= maxPages) {
+                    if (page <= maxPages && hasMorePages) {
                         let delay = baseDelay;
                         if (useDynamicDelay) {
                             // Rastgele gecikme ekle (0.7x - 1.5x arasında)
@@ -289,10 +372,9 @@
                     updateProgress(category, totalProducts, page, false, progressLog);
                     hasMorePages = false;
                 } else {
-                    // Hata sonrası daha uzun bir bekleme ekle
+                    // Hata sonrası daha uzun bir bekleme ekle ve sayfayı yeniden dene
                     const errorDelay = baseDelay * 2;
                     await new Promise(resolve => setTimeout(resolve, errorDelay));
-                    // Sayfayı yeniden deneme - sayfa numarasını artırmadan
                 }
             }
         }
@@ -315,11 +397,13 @@
             }
             
             progressBox.innerHTML = `
-                Kategori: <b>${category}</b> <br>
-                Sayfa: <b>${currentPage}</b> <br>
-                Toplam ASIN: <b>${totalProducts}</b> <br>
-                Toplam benzersiz ASIN: <b>${collectedASINs.length}</b> <br>
-                ${completed ? "<span style='color: #4CAF50;'>✓ Kategori tamamlandı</span>" : ""}
+                <div style="font-weight: bold; color: #4CAF50;">Kategori: ${category}</div>
+                <div>Sayfa: <b>${currentPage}</b> / ${document.getElementById("maxPages").value}</div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span>Toplam ASIN: <b>${totalProducts}</b></span>
+                    <span>Benzersiz: <b>${collectedASINs.length}</b></span>
+                </div>
+                ${completed ? "<div style='color: #4CAF50; margin-top: 5px;'>✓ Kategori tamamlandı</div>" : ""}
                 ${logHtml}
             `;
         }
@@ -339,6 +423,14 @@
                             let asinElements = doc.querySelectorAll("div[data-asin]");
                             if (asinElements.length === 0) {
                                 asinElements = doc.querySelectorAll("[data-asin]");
+                            }
+                            
+                            // Amazon sayfası boş veya robot kontrolü sayfası mı kontrol et
+                            const robotCheck = doc.querySelector('#captchacharacters') || 
+                                              doc.querySelector('.a-box-inner img[src*="captcha"]');
+                            if (robotCheck) {
+                                reject(new Error("Robot doğrulama sayfası tespit edildi"));
+                                return;
                             }
                             
                             const asins = Array.from(asinElements)
