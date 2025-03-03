@@ -120,29 +120,43 @@
 
     async function processCategories() {
         for (let { url, name } of categoryQueue) {
-            let maxPage = await getMaxPage(url);
-            let pageUrls = Array.from({ length: maxPage }, (_, i) => `${url}&page=${i + 1}`);
-            await Promise.all(pageUrls.map(pageUrl => scrapePage(pageUrl, name)));
+            await scrapeAllPages(url, name);
         }
     }
 
-    async function getMaxPage(url) {
+    async function scrapeAllPages(baseUrl, category) {
+        let pages = Array.from({ length: 400 }, (_, i) => i + 1);
+        let requests = pages.map(page => fetchASINs(`${baseUrl}&page=${page}`));
+        let results = await Promise.all(requests);
+        results.flat().forEach(asin => collectedASINs.add(asin));
+        updateProgress(category, collectedASINs.size);
+    }
+
+    function updateProgress(category, totalProducts) {
+        const progressBox = document.getElementById("progressBox");
+        if (progressBox) {
+            progressBox.innerHTML = `Kategori: <b>${category}</b> <br> Toplam ASIN: ${totalProducts}`;
+        }
+    }
+
+    async function fetchASINs(url) {
         try {
             const response = await fetch(url);
             const text = await response.text();
             const doc = new DOMParser().parseFromString(text, "text/html");
-            let lastPage = doc.querySelector(".s-pagination-item:last-child");
-            return lastPage ? parseInt(lastPage.innerText) || 100 : 100;
+            return [...doc.querySelectorAll("div[data-asin]")].map(el => el.getAttribute("data-asin")).filter(Boolean);
         } catch (error) {
             console.error(`Hata: ${error}`);
-            return 100;
+            return [];
         }
     }
 
-    async function scrapePage(url, category) {
-        let asins = await fetchASINs(url);
-        asins.forEach(asin => collectedASINs.add(asin));
-        updateProgress(category, collectedASINs.size);
+    function generateExcel() {
+        const blob = new Blob([Array.from(collectedASINs).join("\n")], { type: "text/csv" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "asins.csv";
+        link.click();
     }
 
     createToggleButton();
