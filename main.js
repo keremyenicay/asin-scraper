@@ -120,50 +120,29 @@
 
     async function processCategories() {
         for (let { url, name } of categoryQueue) {
-            let maxPages = await getMaxPages(url);
-            await scrapeCategory(url, name, maxPages);
+            let maxPage = await getMaxPage(url);
+            let pageUrls = Array.from({ length: maxPage }, (_, i) => `${url}&page=${i + 1}`);
+            await Promise.all(pageUrls.map(pageUrl => scrapePage(pageUrl, name)));
         }
     }
 
-    async function getMaxPages(url) {
+    async function getMaxPage(url) {
         try {
             const response = await fetch(url);
             const text = await response.text();
             const doc = new DOMParser().parseFromString(text, "text/html");
-            const lastPageLink = doc.querySelector(".s-pagination-item.s-pagination-disabled");
-            return lastPageLink ? parseInt(lastPageLink.innerText.trim()) : 1;
-        } catch (error) {
-            console.error("Sayfa sayısı alınamadı:", error);
-            return 1;
-        }
-    }
-
-    async function scrapeCategory(url, category, maxPages) {
-        for (let page = 1; page <= maxPages; page++) {
-            let pageUrl = `${url}&page=${page}`;
-            let asins = await fetchASINs(pageUrl);
-            asins.forEach(asin => collectedASINs.add(asin));
-            updateProgress(category, collectedASINs.size);
-        }
-    }
-
-    function updateProgress(category, totalProducts) {
-        const progressBox = document.getElementById("progressBox");
-        if (progressBox) {
-            progressBox.innerHTML = `Kategori: <b>${category}</b> <br> Toplam ASIN: ${totalProducts}`;
-        }
-    }
-
-    async function fetchASINs(url) {
-        try {
-            const response = await fetch(url);
-            const text = await response.text();
-            const doc = new DOMParser().parseFromString(text, "text/html");
-            return [...doc.querySelectorAll("div[data-asin]")].map(el => el.getAttribute("data-asin")).filter(Boolean);
+            let lastPage = doc.querySelector(".s-pagination-item:last-child");
+            return lastPage ? parseInt(lastPage.innerText) || 100 : 100;
         } catch (error) {
             console.error(`Hata: ${error}`);
-            return [];
+            return 100;
         }
+    }
+
+    async function scrapePage(url, category) {
+        let asins = await fetchASINs(url);
+        asins.forEach(asin => collectedASINs.add(asin));
+        updateProgress(category, collectedASINs.size);
     }
 
     createToggleButton();
