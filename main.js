@@ -69,6 +69,21 @@
         });
     }
 
+    function createProgressBox() {
+        document.getElementById("progressBox")?.remove();
+        const progressBox = document.createElement("div");
+        progressBox.id = "progressBox";
+        progressBox.style.position = "fixed";
+        progressBox.style.bottom = "10px";
+        progressBox.style.right = "10px";
+        progressBox.style.backgroundColor = "black";
+        progressBox.style.color = "white";
+        progressBox.style.padding = "10px";
+        progressBox.style.border = "1px solid white";
+        progressBox.style.zIndex = "9999";
+        document.body.appendChild(progressBox);
+    }
+
     function loadCategories() {
         const categoryContainer = document.getElementById("categoryList");
         categoryContainer.innerHTML = "<b>Mağaza Kategorileri:</b><br>";
@@ -102,21 +117,6 @@
         createProgressBox();
         await processCategories();
         generateExcel();
-    }
-
-    async function fetchASINs(url) {
-        return new Promise((resolve) => {
-            let xhr = new XMLHttpRequest();
-            xhr.open("GET", url, true);
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState === 4 && xhr.status === 200) {
-                    let doc = new DOMParser().parseFromString(xhr.responseText, "text/html");
-                    let asins = [...doc.querySelectorAll("div[data-asin]")].map(el => el.getAttribute("data-asin")).filter(Boolean);
-                    resolve(asins);
-                }
-            };
-            xhr.send();
-        });
     }
 
     async function processCategories() {
