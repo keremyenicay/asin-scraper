@@ -67,24 +67,43 @@
         loadCategories();
     }
 
-    function processCategories(maxPages) {
-        async function scrapePages(categoryUrl, startPage, maxPages) {
-            for (let page = startPage; page <= maxPages && currentlyScraping; page++) {
-                let pageUrl = `${categoryUrl}&page=${page}`;
-                let asins = await fetchASINs(pageUrl);
-                collectedASINs.push(...asins);
-                updateProgress(page, collectedASINs.length);
-                if (asins.length === 0) break;
-            }
+    function loadCategories() {
+        const categoryContainer = document.getElementById("categoryList");
+        categoryContainer.innerHTML = "<b>Mevcut Kategoriler:</b><br>";
+
+        let categories = document.querySelectorAll("a[href*='rh=i']");
+        if (categories.length === 0) {
+            categoryContainer.innerHTML += "<p>Kategori bulunamadı.</p>";
+            return;
         }
 
-        (async () => {
-            for (let categoryUrl of categoryQueue) {
-                await scrapePages(categoryUrl, 1, maxPages);
-            }
-            currentlyScraping = false;
-            downloadResults();
-        })();
+        categories.forEach(item => {
+            const categoryName = item.innerText.trim();
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.value = convertToRHFormat(item.href);
+            checkbox.style.marginRight = "5px";
+
+            const label = document.createElement("label");
+            label.textContent = categoryName;
+
+            categoryContainer.appendChild(checkbox);
+            categoryContainer.appendChild(label);
+            categoryContainer.appendChild(document.createElement("br"));
+        });
+    }
+
+    function convertToRHFormat(url) {
+        let sellerMatch = window.location.href.match(/me=([A-Z0-9]+)/);
+        let marketplaceMatch = window.location.href.match(/marketplaceID=([A-Z0-9]+)/);
+        let domain = window.location.hostname;
+
+        if (sellerMatch && marketplaceMatch) {
+            let sellerId = sellerMatch[1];
+            let marketplaceId = marketplaceMatch[1];
+            return `https://${domain}/s?rh=p_6%3A${sellerId}&marketplaceID=${marketplaceId}`;
+        }
+        return url;
     }
 
     createToggleButton();
