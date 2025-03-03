@@ -118,36 +118,29 @@
         document.body.appendChild(progressBox);
     }
 
-    async function processCategories() {
-        for (let { url, name } of categoryQueue) {
-            await scrapeAllPages(url, name);
-        }
-    }
-
-    async function scrapeAllPages(baseUrl, category) {
-        let pages = Array.from({ length: 400 }, (_, i) => i + 1);
-        let requests = pages.map(page => fetchASINs(`${baseUrl}&page=${page}`));
-        let results = await Promise.all(requests);
-        results.flat().forEach(asin => collectedASINs.add(asin));
-        updateProgress(category, collectedASINs.size);
-    }
-
-    function updateProgress(category, totalProducts) {
-        const progressBox = document.getElementById("progressBox");
-        if (progressBox) {
-            progressBox.innerHTML = `Kategori: <b>${category}</b> <br> Toplam ASIN: ${totalProducts}`;
-        }
-    }
-
-    async function fetchASINs(url) {
+    async function fetchASINsAjax(url) {
         try {
-            const response = await fetch(url);
-            const text = await response.text();
-            const doc = new DOMParser().parseFromString(text, "text/html");
-            return [...doc.querySelectorAll("div[data-asin]")].map(el => el.getAttribute("data-asin")).filter(Boolean);
+            const response = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
+            const json = await response.json();
+            return json.results.map(item => item.asin);
         } catch (error) {
             console.error(`Hata: ${error}`);
             return [];
+        }
+    }
+
+    async function processCategories() {
+        for (let { url, name } of categoryQueue) {
+            let page = 1;
+            let hasMorePages = true;
+            while (hasMorePages && page <= 400) {
+                let ajaxUrl = `${url}&ajax=1&page=${page}`;
+                let asins = await fetchASINsAjax(ajaxUrl);
+                if (asins.length === 0) hasMorePages = false;
+                asins.forEach(asin => collectedASINs.add(asin));
+                updateProgress(name, collectedASINs.size);
+                page++;
+            }
         }
     }
 
