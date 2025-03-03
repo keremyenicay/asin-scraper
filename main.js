@@ -281,49 +281,50 @@
     }
 
     function createProgressBox() {
-        const existingBox = document.getElementById("progressBox");
-        if (existingBox) existingBox.remove();
+    const existingBox = document.getElementById("progressBox");
+    if (existingBox) existingBox.remove();
 
-        const progressBox = document.createElement("div");
-        progressBox.id = "progressBox";
-        progressBox.style.position = "fixed";
-        progressBox.style.top = "50%";
-        progressBox.style.left = "50%";
-        progressBox.style.transform = "translate(-50%, -50%)";
-        progressBox.style.backgroundColor = "#333";
-        progressBox.style.color = "white";
-        progressBox.style.padding = "15px";
-        progressBox.style.borderRadius = "8px";
-        progressBox.style.zIndex = "9999";
-        progressBox.style.minWidth = "250px";
-        progressBox.style.boxShadow = "0 4px 8px rgba(0,0,0,0.3)";
-        progressBox.style.fontFamily = "Arial, sans-serif";
-        progressBox.style.textAlign = "center";
-        
-        progressBox.innerHTML = `
-            <div style="margin-bottom: 10px; font-weight: bold; font-size: 16px; border-bottom: 1px solid #555; padding-bottom: 5px;">
-                ASIN Tarama İlerlemesi
-            </div>
-            <div id="currentCategory" style="margin-bottom: 5px;">Kategori: <span style="font-weight: bold;">-</span></div>
-            <div id="currentPage" style="margin-bottom: 5px;">Sayfa: <span>0</span> / <span>0</span></div>
-            <div id="productCount" style="margin-bottom: 5px;">Ürün Sayısı: <span>0</span></div>
-            <div id="totalProductCount" style="margin-bottom: 10px;">Toplam Ürün: <span>0</span></div>
-            <div style="width: 100%; background-color: #555; height: 10px; border-radius: 5px; overflow: hidden;">
-                <div id="progressBar" style="width: 0%; height: 100%; background-color: #4CAF50;"></div>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-top: 10px;">
-                <button id="pauseButton" style="padding: 5px 10px; background-color: #FFC107; border: none; border-radius: 4px; cursor: pointer;">Duraklat</button>
-                <button id="cancelButton" style="padding: 5px 10px; background-color: #f44336; border: none; border-radius: 4px; cursor: pointer;">İptal</button>
-                <button id="downloadButton" style="padding: 5px 10px; background-color: #2196F3; border: none; border-radius: 4px; cursor: pointer;">İndİr</button>
-            </div>
-        `;
-        
-        document.body.appendChild(progressBox);
-        
-        document.getElementById("pauseButton").addEventListener("click", togglePause);
-        document.getElementById("cancelButton").addEventListener("click", cancelScraping);
-        document.getElementById("downloadButton").addEventListener("click", generateExcel);
-    }
+    const progressBox = document.createElement("div");
+    progressBox.id = "progressBox";
+    progressBox.style.position = "fixed";
+    progressBox.style.bottom = "30px"; // Position from bottom instead of top
+    progressBox.style.left = "50%";
+    progressBox.style.transform = "translateX(-50%)"; // Only transform X axis
+    progressBox.style.backgroundColor = "#333";
+    progressBox.style.color = "white";
+    progressBox.style.padding = "15px";
+    progressBox.style.borderRadius = "8px";
+    progressBox.style.zIndex = "9999";
+    progressBox.style.minWidth = "250px";
+    progressBox.style.boxShadow = "0 4px 8px rgba(0,0,0,0.3)";
+    progressBox.style.fontFamily = "Arial, sans-serif";
+    progressBox.style.textAlign = "center";
+    
+    // Rest of the function remains the same
+    progressBox.innerHTML = `
+        <div style="margin-bottom: 10px; font-weight: bold; font-size: 16px; border-bottom: 1px solid #555; padding-bottom: 5px;">
+            ASIN Tarama İlerlemesi
+        </div>
+        <div id="currentCategory" style="margin-bottom: 5px;">Kategori: <span style="font-weight: bold;">-</span></div>
+        <div id="currentPage" style="margin-bottom: 5px;">Sayfa: <span>0</span> / <span>0</span></div>
+        <div id="productCount" style="margin-bottom: 5px;">Ürün Sayısı: <span>0</span></div>
+        <div id="totalProductCount" style="margin-bottom: 10px;">Toplam Ürün: <span>0</span></div>
+        <div style="width: 100%; background-color: #555; height: 10px; border-radius: 5px; overflow: hidden;">
+            <div id="progressBar" style="width: 0%; height: 100%; background-color: #4CAF50;"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 10px;">
+            <button id="pauseButton" style="padding: 5px 10px; background-color: #FFC107; border: none; border-radius: 4px; cursor: pointer;">Duraklat</button>
+            <button id="cancelButton" style="padding: 5px 10px; background-color: #f44336; border: none; border-radius: 4px; cursor: pointer;">İptal</button>
+            <button id="downloadButton" style="padding: 5px 10px; background-color: #2196F3; border: none; border-radius: 4px; cursor: pointer;">İndİr</button>
+        </div>
+    `;
+    
+    document.body.appendChild(progressBox);
+    
+    document.getElementById("pauseButton").addEventListener("click", togglePause);
+    document.getElementById("cancelButton").addEventListener("click", cancelScraping);
+    document.getElementById("downloadButton").addEventListener("click", generateExcel);
+}
 
     let isPaused = false;
     
