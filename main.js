@@ -25,11 +25,37 @@
             button.style.backgroundColor = active ? "green" : "red";
             button.innerText = active ? "Eklenti Aktif ✅" : "Eklentiyi Aktif Et";
             if (active) {
-                startScraping();
+                openControlPanel();
             } else {
                 currentlyScraping = false;
             }
         });
+    }
+
+    function openControlPanel() {
+        document.getElementById("customPanel")?.remove();
+        const panel = document.createElement("div");
+        panel.id = "customPanel";
+        panel.style.position = "fixed";
+        panel.style.top = "50px";
+        panel.style.left = "50%";
+        panel.style.transform = "translateX(-50%)";
+        panel.style.width = "400px";
+        panel.style.backgroundColor = "white";
+        panel.style.border = "2px solid black";
+        panel.style.zIndex = "10000";
+        panel.style.padding = "10px";
+        panel.style.borderRadius = "8px";
+        panel.style.boxShadow = "0 4px 8px rgba(0,0,0,0.2)";
+        document.body.appendChild(panel);
+
+        panel.innerHTML = `
+            <h3 style="text-align:center;">ASIN Tarayıcı</h3>
+            <div style="text-align:center;">
+                <button id="startScraping" style="padding: 10px; font-size: 16px; background-color: blue; color: white; border: none; cursor: pointer; border-radius: 5px;">Taramayı Başlat</button>
+            </div>
+        `;
+        document.getElementById("startScraping").addEventListener("click", startScraping);
     }
 
     function startScraping() {
@@ -45,9 +71,24 @@
             let sellerId = sellerMatch[1];
             let marketplaceId = marketplaceMatch[1];
             let newUrl = `https://www.amazon.co.uk/s?rh=p_6%3A${sellerId}&marketplaceID=${marketplaceId}`;
-            scrapePages(newUrl, 1, 400);
+            openCategoryPage(newUrl);
         }
     }
+
+    function openCategoryPage(url) {
+        let newTab = window.open(url, "_blank");
+        if (newTab) {
+            newTab.onload = function () {
+                newTab.postMessage({ action: "startScraping" }, "*");
+            };
+        }
+    }
+
+    window.addEventListener("message", function (event) {
+        if (event.data.action === "startScraping") {
+            scrapePages(event.origin, 1, 400);
+        }
+    });
 
     async function scrapePages(baseUrl, startPage, maxPages) {
         let pageNumbers = Array.from({ length: maxPages }, (_, i) => i + 1);
